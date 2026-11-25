@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from investment.gui import InvestmentApp
+from investment.news import NewsResult, SourceReport, make_item
 from investment.search import Company, SearchResults
 
 
@@ -100,3 +101,62 @@ def test_invalid_dates_do_not_start_network(app, monkeypatch):
     app.load_button.invoke()
     fetch.assert_not_called()
     assert not app.busy
+
+
+def test_news_collect_chart_click_and_full_export(app, monkeypatch, history):
+    company = Company("AAPL", "Apple Inc.", "NASDAQ", "Yahoo")
+    app.show_results(SearchResults([company]))
+    app.start.set("2024-01-01")
+    app.end.set("2024-01-31")
+    app.show_history(history)
+    news = make_item(
+        company, "test", "Apple beats estimates", "2024-01-02", "https://example.com/a"
+    )
+    result = NewsResult(
+        "AAPL",
+        "Apple Inc.",
+        "2024-01-01",
+        "2024-01-31",
+        [news],
+        [SourceReport("test", "sampled", 1)],
+    )
+
+    def collect(*args):
+        args[-1]("intermediate progress")
+        return result
+
+    monkeypatch.setattr("investment.news_ui.collect_news", collect)
+    panel = app.news_panel
+    panel.collect_button.invoke()
+    finish(app)
+    assert len(panel.tree.get_children()) == 1 and panel.markers is not None
+    assert "규칙" in panel.detail.get("1.0", "end")
+    from types import SimpleNamespace
+
+    panel.on_pick(SimpleNamespace(artist=panel.markers, ind=[0]))
+    assert panel.date_filter == "2024-01-02"
+    app.query.set("MSFT")
+    app.start.set("2020-01-01")
+    panel.export_button.invoke()
+    finish(app)
+    files = list(app.data_dir.glob("*news*.csv"))
+    assert pd.read_csv(files[0])["symbol"].tolist() == ["AAPL"]
+
+
+def test_news_controls_fit_small_window(app):
+    app.root.geometry("980x660")
+    app.notebook.select(app.news_panel.frame)
+    app.root.update()
+    panel = app.news_panel
+    for widget in (
+        panel.collect_button,
+        panel.settings_button,
+        panel.export_button,
+        panel.import_button,
+        panel.split,
+    ):
+        x = widget.winfo_rootx() - app.root.winfo_rootx()
+        y = widget.winfo_rooty() - app.root.winfo_rooty()
+        assert x >= 0 and y >= 0
+        assert x + widget.winfo_width() <= app.root.winfo_width()
+        assert y + widget.winfo_height() <= app.root.winfo_height()

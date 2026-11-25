@@ -31,7 +31,9 @@ def save_csv(
             raise FileExistsError(f"File exists: {destination}. Use --overwrite to replace it.")
     target.parent.mkdir(parents=True, exist_ok=True)
     export = history.data.copy()
-    export["timestamp"] = export["timestamp"].map(lambda value: value.isoformat())
+    export["timestamp"] = export["timestamp"].map(
+        lambda value: value.isoformat() if not pd.isna(value) else ""
+    )
     pending: list[tuple[Path, Path]] = []
     try:
         for destination, content, encoding in (

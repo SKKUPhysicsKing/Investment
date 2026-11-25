@@ -23,6 +23,7 @@ from matplotlib.figure import Figure
 
 from .app_model import export_history, inclusive_request, load_company, plot_times
 from .market import PriceHistory
+from .news_ui import NewsPanel
 from .search import Company, SearchResults, search_companies
 
 INTERVAL_LABELS = {
@@ -58,11 +59,12 @@ class InvestmentApp:
         self.table_notice = tk.StringVar(value="조회 후 데이터를 확인할 수 있습니다.")
         self._configure_window()
         self._build()
+        self.news_panel = NewsPanel(self)
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.timer = self.root.after(100, self._poll)
 
     def _configure_window(self):
-        self.root.title("Investment — 주가 시계열")
+        self.root.title("Investment — 주가·뉴스 시계열")
         width = min(1180, self.root.winfo_screenwidth() - 60)
         height = min(800, self.root.winfo_screenheight() - 80)
         self.root.geometry(f"{width}x{height}")
@@ -96,9 +98,9 @@ class InvestmentApp:
         header = ttk.Frame(self.root, padding=(12, 10))
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text="Investment · 주가 시계열", font=(self.ui_font, 13, "bold")).grid(
-            row=0, column=0, sticky="w"
-        )
+        ttk.Label(
+            header, text="Investment · 주가·뉴스 시계열", font=(self.ui_font, 13, "bold")
+        ).grid(row=0, column=0, sticky="w")
         revision = os.environ.get("INVESTMENT_REVISION", "")
         label = f"v{version('investment-stock-data')}" + (f" · {revision[:8]}" if revision else "")
         ttk.Label(header, text=label).grid(row=0, column=1, sticky="e")
@@ -258,10 +260,10 @@ class InvestmentApp:
         bottom = ttk.Frame(right, padding=(0, 8))
         bottom.grid(row=3, column=0, sticky="ew")
         bottom.columnconfigure(0, weight=1)
-        ttk.Label(bottom, text="주말·휴장일 제외 · 마지막 봉은 장중 갱신 가능").grid(
+        ttk.Label(bottom, text="주가: 주말·휴장일 제외 · 마지막 봉은 장중 갱신 가능").grid(
             row=0, column=0, sticky="w"
         )
-        self.export_button = ttk.Button(bottom, text="CSV 내보내기", command=self.export)
+        self.export_button = ttk.Button(bottom, text="주가 CSV", command=self.export)
         self.export_button.grid(row=0, column=1, padx=5)
         self.export_button.state(["disabled"])
         ttk.Button(bottom, text="data 폴더 열기", command=self.open_data).grid(row=0, column=2)
@@ -301,6 +303,8 @@ class InvestmentApp:
         self.export_button.state(
             ["!disabled"] if self.history is not None and not self.busy else ["disabled"]
         )
+        if hasattr(self, "news_panel"):
+            self.news_panel.update_controls()
 
     def _run(self, work, done, status: str):
         if self.busy:
@@ -324,9 +328,13 @@ class InvestmentApp:
         try:
             while True:
                 done, result, error = self.events.get_nowait()
+                if done is None:
+                    self.status.set(result)
+                    continue
                 self.busy = False
                 self.progress.stop()
                 if error:
+                    self.news_panel.cancel.set()
                     self.status.set(f"실패: {error}")
                     messagebox.showerror("작업 실패", str(error), parent=self.root)
                 else:
@@ -463,6 +471,8 @@ class InvestmentApp:
         self.volume_ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
         self.volume_ax.set_xlabel(f"Exchange local time · {meta.get('exchange_timezone') or 'UTC'}")
         self.price_ax.tick_params(labelbottom=False)
+        if hasattr(self, "news_panel"):
+            self.news_panel.draw_overlay()
         self.canvas.draw_idle()
 
     def export(self):
@@ -489,6 +499,7 @@ class InvestmentApp:
 
     def close(self):
         self.closed = True
+        self.news_panel.cancel.set()
         self.root.after_cancel(self.timer)
         self.root.destroy()
 
