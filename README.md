@@ -38,11 +38,24 @@ Invoke-WebRequest "https://raw.githubusercontent.com/SKKUPhysicsKing/Investment/
 ## 자동 업데이트
 
 - `StartInvestment.cmd` 또는 `python launch_app.py`로 **앱을 실행할 때마다** GitHub 최신 커밋을 확인합니다. 실행 중인 창은 강제로 재시작하지 않습니다.
-- 새 버전이 있으면 앱 폴더의 `.investment-app` 아래에 별도 실행 환경을 설치하고 기본 동작에 필요한 모듈을 검사한 뒤 새 버전으로 실행합니다. 업데이트가 없는 경우 재설치하지 않습니다.
+- 새 버전이 있으면 별도 실행 환경에 설치하고 기본 동작에 필요한 모듈을 검사한 뒤 새 버전으로 실행합니다. Windows는 경로 길이 제한을 피하기 위해 `%LOCALAPPDATA%\Investment` 아래의 짧은 전용 경로를 사용합니다. 앱 폴더와 Python 버전별로 환경을 구분하며, ZIP을 여러 단계 폴더에 풀어도 패키지 설치 경로는 길어지지 않습니다. macOS/Linux는 앱 폴더의 `.investment-app` 아래에 설치합니다. 업데이트가 없는 경우 재설치하지 않습니다.
 - 다운로드·설치·업데이트 확인에 실패하면 마지막으로 설치가 완료된 버전으로 실행합니다. 처음 실행할 때는 설치를 위한 인터넷 연결이 필요합니다. 주가 조회에는 별도로 Yahoo/KRX 연결이 필요합니다.
 - 현재 버전과 직전 버전만 보관합니다. `data` 폴더와 기존 CSV는 업데이트나 이전 버전 정리 대상에 포함하지 않습니다. 한 폴더에서 앱은 하나만 실행합니다.
 - 제목 영역에 앱 버전과 Git 커밋 앞 8자리를 표시합니다. 런처는 `launch_app.py`와 `StartInvestment.cmd` 두 파일이며, 앱 코드와 패키지 설치는 자동으로 관리합니다.
 - 업데이트 확인을 생략하고 설치된 버전을 실행하려면 `python launch_app.py --no-update`를 사용합니다.
+
+### Windows 설치 중 `lxml` / 긴 경로 오류가 발생한 경우
+
+초기 런처는 앱 폴더 아래에 실행 환경을 만들었기 때문에 `Investment-main` 등의 폴더가 중첩되면 Windows의 260자 경로 제한을 넘을 수 있었습니다. 수정된 런처는 짧은 사용자 전용 경로에 설치하므로 Windows 설정을 변경할 필요가 없습니다. CSV 저장 위치는 계속 **실행한 앱 폴더의 `data`**입니다.
+
+기존 런처의 설치 오류는 앱 자동 업데이트 전에 발생하므로, `StartInvestment.cmd`가 있는 폴더에서 PowerShell을 열고 `launch_app.py`를 한 번 교체하세요.
+
+```powershell
+Invoke-WebRequest "https://raw.githubusercontent.com/SKKUPhysicsKing/Investment/main/launch_app.py" -OutFile ".\launch_app.py"
+.\StartInvestment.cmd
+```
+
+앱 폴더나 `data`를 이동·삭제할 필요는 없습니다. 이전 경로에 정상 설치된 버전이 있다면 새 경로 설치에 실패하거나 오프라인으로 실행할 때 그 버전을 계속 사용할 수 있습니다. 가상환경을 직접 이동하지는 않습니다.
 
 macOS/Linux에서는 Tcl/Tk가 포함된 Python으로 `python launch_app.py`를 실행할 수 있습니다. Windows를 기본 사용 환경으로 검증합니다.
 
@@ -197,7 +210,7 @@ python -m build
 
 테스트는 네트워크 없이 날짜 경계, 한국/미국 시간대, DST, 중복·결측 처리, 회사 검색, 내보내기, SQLite 갱신, 업데이트 전환·실패 시 복구를 검증합니다. GUI 통합 테스트는 검색→조회→그래프→CSV 저장과 최소 창 크기에서 주요 컨트롤이 화면 안에 들어오는지를 확인합니다. Linux에서는 `xvfb-run -a pytest -q`로 GUI 테스트를 실행합니다. 디스플레이가 없는 일반 터미널에서는 GUI 테스트만 건너뜁니다.
 
-GitHub Actions는 Linux Python 3.10/3.12/3.13과 Windows Python 3.12에서 검증과 패키지 빌드를 실행합니다. 실제 Yahoo/KRX 연결은 앱 또는 위 명령줄 예제로 별도 확인할 수 있습니다.
+GitHub Actions는 Linux Python 3.10/3.12/3.13과 Windows Python 3.10/3.12에서 검증과 패키지 빌드를 실행합니다. Windows에서는 깊게 중첩된 앱 폴더로부터 실제 가상환경·패키지를 설치하고, 문제의 `lxml` 리소스 파일 생성, 재실행 시 설치 생략, 기존 CSV 보존을 추가 검증합니다. 이 설치 테스트의 GitHub 응답만 체크아웃한 소스로 대체합니다. 실제 Yahoo/KRX 연결은 앱 또는 위 명령줄 예제로 별도 확인할 수 있습니다.
 
 ## 데이터 출처
 

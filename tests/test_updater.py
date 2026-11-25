@@ -2,7 +2,7 @@ import importlib.util
 import json
 import stat
 import zipfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import Mock
 
 import pytest
@@ -15,12 +15,17 @@ SPEC.loader.exec_module(launcher)
 OLD, NEW, OLDER = "1" * 40, "2" * 40, "3" * 40
 
 
+@pytest.fixture(autouse=True)
+def isolated_local_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+
+
 def runtime(home, revision):
-    return home / ".investment-app" / launcher.RUNTIME_TAG / "versions" / revision
+    return launcher.versions_dir(launcher.cache_root(home)) / revision
 
 
 def state_path(home):
-    return home / ".investment-app" / launcher.RUNTIME_TAG / "state.json"
+    return launcher.cache_root(home) / "state.json"
 
 
 def mark_ready(path, revision):
@@ -77,7 +82,7 @@ def test_same_revision_and_offline_start_do_not_reinstall(monkeypatch, tmp_path)
 
 def test_first_launch_failure_has_no_active_state(monkeypatch, tmp_path):
     monkeypatch.setattr(launcher, "remote_revision", Mock(side_effect=OSError("offline")))
-    with pytest.raises(RuntimeError, match="First launch"):
+    with pytest.raises(RuntimeError, match="App setup did not complete"):
         launcher.choose_runtime(tmp_path)
     assert not state_path(tmp_path).exists()
 
@@ -127,3 +132,66 @@ def test_failed_install_cleans_only_incomplete_slot(monkeypatch, tmp_path):
         launcher.install_revision(runtime(tmp_path, NEW), NEW)
     assert not runtime(tmp_path, NEW).exists()
     assert launcher.ready(runtime(tmp_path, OLD), OLD)
+
+
+def test_windows_cache_avoids_reported_long_lxml_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(launcher, "WINDOWS", True)
+    home = tmp_path / "Investment" / "Investment-main" / "Investment-main"
+    cache = launcher.cache_root(home)
+    assert cache.parent == tmp_path / "local" / "Investment"
+    assert len(cache.name) == 12
+    assert not cache.is_relative_to(home)
+    resource = PureWindowsPath(
+        "venv/Lib/site-packages/lxml/isoschematron/resources/xsl/"
+        "iso-schematron-xslt1/iso_schematron_skeleton_for_xslt1.xsl"
+    )
+    reported_home = PureWindowsPath(
+        "C:/Users/user/Desktop/Investment/Investment-main/Investment-main"
+    )
+    old = reported_home / ".investment-app" / "py310-win32-AMD64" / "versions" / NEW / resource
+    new = (
+        PureWindowsPath("C:/Users/user/AppData/Local/Investment")
+        / cache.name
+        / "v"
+        / NEW
+        / resource
+    )
+    assert len(str(old)) >= 260
+    assert len(str(new)) < 240
+
+
+def test_windows_cache_distinguishes_app_folders_and_python_versions(monkeypatch, tmp_path):
+    monkeypatch.setattr(launcher, "WINDOWS", True)
+    home = tmp_path / "first app"
+    first = launcher.cache_root(home)
+    assert first == launcher.cache_root(home)
+    assert first != launcher.cache_root(tmp_path / "second app")
+    monkeypatch.setattr(launcher, "RUNTIME_TAG", launcher.RUNTIME_TAG + "-other-python")
+    assert first != launcher.cache_root(home)
+
+
+def test_legacy_windows_environment_remains_available_on_update_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(launcher, "WINDOWS", True)
+    legacy_cache = tmp_path / ".investment-app" / launcher.RUNTIME_TAG
+    legacy = legacy_cache / "versions" / OLD
+    mark_ready(legacy, OLD)
+    launcher.atomic_json(legacy_cache / "state.json", {"active": OLD})
+    monkeypatch.setattr(launcher, "remote_revision", Mock(side_effect=OSError("offline")))
+    assert launcher.choose_runtime(tmp_path) == (legacy, OLD)
+    assert launcher.choose_runtime(tmp_path, offline=True) == (legacy, OLD)
+
+
+def test_legacy_windows_upgrade_reinstalls_without_moving_venv_or_data(monkeypatch, tmp_path):
+    monkeypatch.setattr(launcher, "WINDOWS", True)
+    legacy_cache = tmp_path / ".investment-app" / launcher.RUNTIME_TAG
+    legacy = legacy_cache / "versions" / OLD
+    mark_ready(legacy, OLD)
+    launcher.atomic_json(legacy_cache / "state.json", {"active": OLD})
+    data = tmp_path / "data" / "samsung.csv"
+    data.parent.mkdir()
+    data.write_text("preserve export")
+    monkeypatch.setattr(launcher, "remote_revision", lambda: NEW)
+    monkeypatch.setattr(launcher, "install_revision", mark_ready)
+    assert launcher.choose_runtime(tmp_path) == (runtime(tmp_path, NEW), NEW)
+    assert launcher.ready(legacy, OLD)
+    assert data.read_text() == "preserve export"

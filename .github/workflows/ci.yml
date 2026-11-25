@@ -16,6 +16,8 @@ jobs:
         os: [ubuntu-latest]
         include:
           - os: windows-latest
+            python-version: "3.10"
+          - os: windows-latest
             python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
@@ -29,5 +31,7 @@ jobs:
         run: xvfb-run -a pytest -q
       - if: runner.os == 'Windows'
         run: pytest -q
+      - if: runner.os == 'Windows'
+        run: python tests/windows_bootstrap_smoke.py
       - run: python -m build
       - run: investment --help

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -29,6 +30,30 @@ MAX_ARCHIVE = 20 * 1024 * 1024
 RUNTIME_TAG = (
     f"py{sys.version_info.major}{sys.version_info.minor}-{sys.platform}-{platform.machine()}"
 )
+WINDOWS = sys.platform == "win32"
+
+
+def cache_root(home: Path) -> Path:
+    """Keep Windows dependency paths independent of the ZIP extraction depth."""
+    if WINDOWS:
+        local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        identity = str(home.resolve()).casefold() + "\0" + RUNTIME_TAG
+        key = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
+        return local / "Investment" / key
+    return home / ".investment-app" / RUNTIME_TAG
+
+
+def versions_dir(cache: Path) -> Path:
+    return cache / ("v" if WINDOWS else "versions")
+
+
+def installed_runtime(cache: Path, versions: Path) -> tuple[Path, str] | None:
+    state = read_json(cache / "state.json")
+    for key in ("active", "previous"):
+        revision = state.get(key)
+        if valid_revision(revision) and ready(versions / revision, revision):
+            return versions / revision, revision
+    return None
 
 
 def valid_revision(value) -> bool:
@@ -181,21 +206,21 @@ def install_revision(runtime: Path, revision: str):
 
 
 def choose_runtime(home: Path, *, offline: bool = False) -> tuple[Path, str]:
-    cache = home / ".investment-app" / RUNTIME_TAG
-    versions = cache / "versions"
+    cache = cache_root(home)
+    versions = versions_dir(cache)
     state_path = cache / "state.json"
-    state = read_json(state_path)
-    active = state.get("active")
-    if not valid_revision(active) or not ready(versions / active, active):
-        active = None
-        previous = state.get("previous")
-        if valid_revision(previous) and ready(versions / previous, previous):
-            active = previous
+    fallback = installed_runtime(cache, versions)
+    active = fallback[1] if fallback else None
+    if fallback is None and WINDOWS:
+        # Virtual environments cannot be moved. Keep an already working legacy
+        # installation as a fallback, and install updates at the new short path.
+        legacy = home / ".investment-app" / RUNTIME_TAG
+        fallback = installed_runtime(legacy, legacy / "versions")
     try:
         if offline:
-            if not active:
+            if not fallback:
                 raise RuntimeError("No installed app is available for offline startup.")
-            return versions / active, active
+            return fallback
         print("Checking GitHub for updates…", flush=True)
         latest = remote_revision()
         if latest != active:
@@ -214,13 +239,14 @@ def choose_runtime(home: Path, *, offline: bool = False) -> tuple[Path, str]:
             print("Already up to date.", flush=True)
         return versions / active, active
     except Exception as exc:
-        if active:
+        if fallback:
             print(
-                f"Update unavailable: {exc}\nStarting installed version {active[:8]}.", flush=True
+                f"Update unavailable: {exc}\nStarting installed version {fallback[1][:8]}.",
+                flush=True,
             )
-            return versions / active, active
+            return fallback
         raise RuntimeError(
-            f"First launch needs internet and a successful installation: {exc}"
+            f"App setup did not complete and no installed version is available: {exc}"
         ) from exc
 
 

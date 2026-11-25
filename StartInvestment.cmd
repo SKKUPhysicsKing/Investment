@@ -11,7 +11,7 @@ if errorlevel 1 (
 if errorlevel 1 (
     echo.
     echo Investment could not start. See the message above.
-    echo Python 3.10+ with Tcl/Tk must be installed.
+    echo The startup error above describes the cause.
     pause
 )
 endlocal
