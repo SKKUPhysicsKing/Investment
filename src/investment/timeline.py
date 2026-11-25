@@ -149,6 +149,31 @@ class NewsTimeline:
             controls, text="취소", command=lambda: app.news_panel.stop(), width=5
         )
         self.cancel_button.grid(row=0, column=5, padx=3)
+        self.zoom_mode = tk.BooleanVar(value=False)
+        self.pan_mode = tk.BooleanVar(value=False)
+        self.navigation_buttons = []
+        for column, (label, action, variable) in enumerate(
+            (
+                ("홈", "home", None),
+                ("확대", "zoom", self.zoom_mode),
+                ("이동", "pan", self.pan_mode),
+                ("그림", "save_figure", None),
+            ),
+            6,
+        ):
+            options = {
+                "text": label,
+                "command": lambda action=action: self.navigate(action),
+                "width": 4,
+            }
+            button = (
+                ttk.Checkbutton(controls, variable=variable, **options)
+                if variable is not None
+                else ttk.Button(controls, **options)
+            )
+            button.grid(row=0, column=column, padx=2)
+            button.grid_remove()
+            self.navigation_buttons.append(button)
         listing = ttk.Frame(parent)
         listing.grid(row=1, column=0, sticky="nsew")
         listing.columnconfigure(0, weight=1)
@@ -204,6 +229,25 @@ class NewsTimeline:
         )
         for button in (self.detail_button, self.link_button):
             button.state(["!disabled"] if self.selected() else ["disabled"])
+
+    def set_compact_navigation(self, visible):
+        for button in self.navigation_buttons:
+            button.grid() if visible else button.grid_remove()
+        self.sync_navigation()
+
+    def sync_navigation(self):
+        mode = str(self.app.toolbar.mode).lower()
+        self.zoom_mode.set(mode.startswith("zoom"))
+        self.pan_mode.set(mode.startswith("pan"))
+
+    def navigate(self, action):
+        if action == "home":
+            if self.zoom_mode.get():
+                self.app.toolbar.zoom()
+            elif self.pan_mode.get():
+                self.app.toolbar.pan()
+        getattr(self.app.toolbar, action)()
+        self.sync_navigation()
 
     def set_history(self, history, cached=None):
         symbol = history.metadata["symbol"]

@@ -298,11 +298,17 @@ def test_chart_news_controls_fit_minimum_window(app, history):
         app.timeline.detail_button,
         app.timeline.link_button,
         app.timeline.cancel_button,
+        *app.timeline.navigation_buttons,
     ):
         x = widget.winfo_rootx() - app.root.winfo_rootx()
         y = widget.winfo_rooty() - app.root.winfo_rooty()
         assert 0 <= x and x + widget.winfo_width() <= app.root.winfo_width()
         assert 0 <= y and y + widget.winfo_height() <= app.root.winfo_height()
+    assert app.compact_toolbar
+    app.timeline.navigate("zoom")
+    assert app.toolbar.mode
+    app.timeline.navigate("home")
+    assert not app.toolbar.mode
 
 
 def test_shared_timeline_remains_readable_at_high_dpi(app, history):

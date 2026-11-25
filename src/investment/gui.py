@@ -58,6 +58,7 @@ class InvestmentApp:
         self.price_column = tk.StringVar(value="종가")
         self.show_volume = tk.BooleanVar(value=True)
         self.volume_auto_hidden = False
+        self.compact_toolbar = False
         self.chart_resize_timer = None
         self.last_chart_height = None
         self.last_pane_height = None
@@ -242,7 +243,7 @@ class InvestmentApp:
             "<Map>", lambda _: self.root.after_idle(self._fit_canvas), add="+"
         )
         self.canvas.get_tk_widget().bind("<Configure>", self._schedule_chart_layout, add="+")
-        toolbar_frame = ttk.Frame(plot)
+        self.toolbar_frame = toolbar_frame = ttk.Frame(plot)
         toolbar_frame.grid(row=1, column=0, sticky="ew")
         self.toolbar = NavigationToolbar2Tk(self.canvas, toolbar_frame)
         self.toolbar.update()
@@ -338,6 +339,14 @@ class InvestmentApp:
             self.chart_resize_timer = None
             changed = False
             if height != self.last_chart_height:
+                if height < 240 and not self.compact_toolbar:
+                    self.compact_toolbar = True
+                    self.toolbar_frame.grid_remove()
+                    self.timeline.set_compact_navigation(True)
+                elif height >= 320 and self.compact_toolbar:
+                    self.compact_toolbar = False
+                    self.toolbar_frame.grid()
+                    self.timeline.set_compact_navigation(False)
                 if height < 240 and self.show_volume.get():
                     self.show_volume.set(False)
                     self.volume_auto_hidden = changed = True
