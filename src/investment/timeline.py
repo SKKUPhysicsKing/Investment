@@ -241,7 +241,10 @@ class NewsTimeline:
         self.viewport = self.hover_key = None
         ax.set_ylim(-0.55, 2.85)
         ax.set_yticks(
-            [0, 1, 2], labels=["뉴스", "공시", "실적"], fontfamily=self.app.chart_font, fontsize=8
+            [0, 1, 2],
+            labels=["뉴스", "공시", "실적"],
+            fontfamily=self.app.chart_font,
+            fontsize=self.app.chart_font_size(8),
         )
         ax.grid(axis="x", alpha=0.22)
         for kind, (y, _, color, marker) in LANES.items():
@@ -280,7 +283,7 @@ class NewsTimeline:
                 ha="center",
                 va="center",
                 fontfamily=self.app.chart_font,
-                fontsize=8,
+                fontsize=self.app.chart_font_size(8),
                 color="#666666",
             )
         self.hover = ax.annotate(
@@ -288,7 +291,7 @@ class NewsTimeline:
             xy=(0, 0),
             xytext=(8, 14),
             textcoords="offset points",
-            fontsize=8,
+            fontsize=self.app.chart_font_size(8),
             parse_math=False,
             fontfamily=self.app.chart_font,
             bbox={"boxstyle": "round", "fc": "#ffffff", "ec": "#888888", "alpha": 0.97},
@@ -360,7 +363,7 @@ class NewsTimeline:
                     xytext=(0, 8),
                     textcoords="offset points",
                     ha="center",
-                    fontsize=6.7,
+                    fontsize=self.app.chart_font_size(6.7),
                     parse_math=False,
                     fontfamily=self.app.chart_font,
                     clip_on=True,

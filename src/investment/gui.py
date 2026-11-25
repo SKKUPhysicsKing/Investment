@@ -323,6 +323,10 @@ class InvestmentApp:
         self.volume_auto_hidden = False
         self.draw_plot(preserve_view=True)
 
+    def chart_font_size(self, size):
+        compact = self.canvas.get_tk_widget().winfo_height() < 240
+        return size * min(1.0, 100 / self.figure.dpi) if compact else size
+
     def _schedule_chart_layout(self, event):
         if self.closed:
             return
@@ -531,6 +535,10 @@ class InvestmentApp:
         self.price_ax.clear()
         self.volume_ax.clear()
         self.event_ax.clear()
+        compact = self.canvas.get_tk_widget().winfo_height() < 240
+        self.figure.get_layout_engine().set(
+            h_pad=0.01 if compact else 0.035, w_pad=0.035, hspace=0.01, wspace=0.02
+        )
         self.volume_ax.set_visible(self.show_volume.get())
         self.price_ax.get_subplotspec().get_gridspec().set_height_ratios(
             [3.2, 0.8 if self.show_volume.get() else 0.01, 1.4]
@@ -553,27 +561,33 @@ class InvestmentApp:
             transform=self.price_ax.transAxes,
             va="top",
             fontfamily=self.chart_font,
-            fontsize=9,
+            fontsize=self.chart_font_size(9),
             parse_math=False,
             bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 1},
         )
-        self.price_ax.set_ylabel(f"Price ({meta.get('currency') or '?'})")
+        self.price_ax.set_ylabel(
+            f"Price ({meta.get('currency') or '?'})", fontsize=self.chart_font_size(9)
+        )
+        self.price_ax.tick_params(axis="y", labelsize=self.chart_font_size(8))
         self.price_ax.grid(True, alpha=0.25)
         span = (times.iloc[-1] - times.iloc[0]).total_seconds() / 86400
         width = min(0.8, span / max(len(times), 1) * 0.75) if span else 0.5
         self.volume_ax.bar(times, frame["volume"].astype(float), width=width, color="#9daab5")
-        self.volume_ax.set_ylabel("Volume")
+        self.volume_ax.set_ylabel("Volume", fontsize=self.chart_font_size(8))
+        self.volume_ax.tick_params(axis="y", labelsize=self.chart_font_size(7))
         self.volume_ax.grid(True, alpha=0.2)
         locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
         self.timeline.render(self.history)
         self.event_ax.xaxis.set_major_locator(locator)
         self.event_ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
         self.event_ax.set_xlabel(
-            f"Exchange local time · {meta.get('exchange_timezone') or 'UTC'}", fontsize=8
+            f"Exchange local time · {meta.get('exchange_timezone') or 'UTC'}",
+            fontsize=self.chart_font_size(8),
         )
         self.price_ax.tick_params(labelbottom=False)
         self.volume_ax.tick_params(labelbottom=False)
-        self.event_ax.tick_params(axis="x", labelsize=8)
+        self.event_ax.tick_params(axis="x", labelsize=self.chart_font_size(8))
+        self.event_ax.xaxis.get_offset_text().set_fontsize(self.chart_font_size(7.5))
         if limits:
             self.price_ax.set_xlim(limits[0])
             self.price_ax.set_ylim(limits[1])

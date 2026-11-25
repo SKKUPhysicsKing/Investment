@@ -305,6 +305,19 @@ def test_chart_news_controls_fit_minimum_window(app, history):
         assert 0 <= y and y + widget.winfo_height() <= app.root.winfo_height()
 
 
+def test_shared_timeline_remains_readable_at_high_dpi(app, history):
+    app.show_history(history)
+    app.root.geometry("980x660")
+    app.root.update()
+    app.figure.set_dpi(144)
+    app._fit_canvas()
+    app.draw_plot(preserve_view=True)
+    app.root.update()
+    assert app.price_ax.bbox.height >= 55
+    assert app.event_ax.bbox.height >= 25
+    assert not app.show_volume.get()
+
+
 def test_native_desktop_entry_preserves_data_and_opens_news_tab(tmp_path, monkeypatch):
     import json
 
