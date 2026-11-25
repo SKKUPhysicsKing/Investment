@@ -18,6 +18,7 @@ def make_parser() -> argparse.ArgumentParser:
         description="Download stock price time series from Yahoo Finance."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("gui", help="Open the desktop app (install the [gui] extra first)")
     fetch = subparsers.add_parser("fetch", help="Download one ticker's price history")
     fetch.add_argument("symbol", help="Yahoo ticker, e.g. AAPL, MSFT, 005930.KS, 247540.KQ")
     fetch.add_argument("--start", help="First exchange-local date, inclusive (YYYY-MM-DD)")
@@ -39,6 +40,16 @@ def make_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = make_parser().parse_args(argv)
+    if args.command == "gui":
+        try:
+            from .gui import main as gui_main
+        except ImportError as exc:
+            print(
+                f'GUI dependencies missing: {exc}. Install: python -m pip install ".[gui]"',
+                file=sys.stderr,
+            )
+            return 2
+        return gui_main([])
     try:
         history = fetch_prices(
             args.symbol,

@@ -1,6 +1,54 @@
-# Investment — 주가 시계열 수집
+# Investment — 주가 시계열 앱
 
-Yahoo Finance의 주가 이력을 받아 **시간순 pandas DataFrame, CSV, SQLite**로 저장하는 Python 프로젝트입니다. API 키 없이 종목 티커, 기간, 봉 간격을 지정할 수 있습니다. 기본 조회는 최근 1년의 일봉입니다.
+**회사명 검색 → 기간 입력 → 주가 그래프 → CSV 내보내기**를 제공하는 Windows 데스크톱 앱입니다. 실행할 때 GitHub `main`의 최신 코드를 확인하고 자동으로 설치합니다. 기존 Python API와 명령줄 수집 기능도 사용할 수 있습니다.
+
+## Windows에서 앱 실행
+
+Python 3.10 이상(Tcl/Tk 포함)이 한 번 설치되어 있어야 합니다. 이미 이 프로젝트의 CLI를 실행한 Windows PC라면 일반적으로 그대로 사용할 수 있습니다.
+
+1. [최신 프로젝트 ZIP 다운로드](https://github.com/SKKUPhysicsKing/Investment/archive/refs/heads/main.zip)
+2. ZIP을 원하는 앱 폴더에 **압축 해제**합니다.
+3. 그 폴더의 **`StartInvestment.cmd`를 더블클릭**합니다.
+4. 첫 실행은 필요한 패키지를 설치하므로 몇 분 걸릴 수 있습니다. 준비가 끝나면 앱 창이 열립니다.
+
+Git 설치, 가상환경 활성화, PowerShell 실행 정책 변경, Yahoo 로그인, API 키 입력은 필요하지 않습니다. ZIP 안에서 바로 실행하지 말고 먼저 압축을 해제하세요.
+
+기존 `Investment` 폴더를 그대로 사용하려면 PowerShell에서 아래 두 파일만 받은 뒤 실행해도 됩니다. 소스 전체는 런처가 내려받습니다.
+
+```powershell
+Invoke-WebRequest "https://raw.githubusercontent.com/SKKUPhysicsKing/Investment/main/launch_app.py" -OutFile launch_app.py
+Invoke-WebRequest "https://raw.githubusercontent.com/SKKUPhysicsKing/Investment/main/StartInvestment.cmd" -OutFile StartInvestment.cmd
+.\StartInvestment.cmd
+```
+
+## 앱 사용법
+
+1. 왼쪽에서 `삼성전자`, `에코프로비엠`, `Apple`, `애플`, `AAPL` 같은 회사명/티커를 검색합니다. 한국 기업은 KRX KIND 상장 목록, 해외 기업은 Yahoo 검색을 사용합니다. 해외 기업의 한국어 이름은 애플·엔비디아·마이크로소프트·테슬라·아마존·구글·메타·브로드컴 별칭을 지원하며, 그 밖의 해외 기업은 영문명 또는 티커를 입력하세요.
+2. 검색 결과에서 **원하는 회사와 티커**를 선택합니다. 이름이 비슷한 회사나 다른 시장의 종목을 구분할 수 있습니다.
+3. 시작일/종료일을 `YYYY-MM-DD`로 입력하고 봉 간격을 선택한 뒤 **조회 · PLOT**을 누릅니다. **앱의 시작일과 종료일은 모두 포함**합니다. 일봉·주봉·월봉·1/5/15/30분봉·1시간봉을 지원합니다.
+4. 그래프에서 종가/수정종가와 거래량을 확인합니다. 아래 도구 모음으로 확대·이동·그래프 저장을 할 수 있습니다. 데이터 표 탭은 최근 500행까지 표시합니다.
+5. **CSV 내보내기**를 누르면 **앱 실행 폴더의 `data` 폴더**에 조회한 전체 데이터를 저장합니다. 저장 전에는 CSV를 만들지 않습니다. **data 폴더 열기**로 저장한 파일을 확인합니다.
+
+예: `Investment/StartInvestment.cmd`로 실행하면 `Investment/data/005930.KS_2026-01-02_2026-11-25_1d.csv`와 같은 이름으로 저장합니다. 날짜는 실제 반환된 첫/마지막 봉 기준이며 같은 파일명이 있으면 `_2`, `_3`을 붙여 기존 파일을 보존합니다. 기존 CLI와 같은 11개 열 및 JSON 메타데이터를 저장합니다. 그래프의 종가/수정종가 선택과 관계없이 CSV에는 두 열을 모두 담습니다.
+
+검색어·날짜를 바꿔도 새로 조회하기 전에는 기존 그래프가 유지됩니다. 내보내기는 **현재 표시 중인 데이터**를 기준으로 하며 회사명·실제 데이터 범위·봉 수를 그래프 위에 표시합니다. 조회 중에도 창이 응답하며, 실패하면 기존 그래프를 보존하고 오류를 안내합니다.
+
+일봉의 날짜는 거래소 현지 날짜로 표시합니다. 주말·휴장일은 생성하지 않습니다. 분봉의 조회 가능 기간은 Yahoo의 제공 제한을 따르므로 오래된 분봉 요청에 실패하면 최근의 짧은 기간으로 요청하세요.
+
+## 자동 업데이트
+
+- `StartInvestment.cmd` 또는 `python launch_app.py`로 **앱을 실행할 때마다** GitHub 최신 커밋을 확인합니다. 실행 중인 창은 강제로 재시작하지 않습니다.
+- 새 버전이 있으면 앱 폴더의 `.investment-app` 아래에 별도 실행 환경을 설치하고 기본 동작에 필요한 모듈을 검사한 뒤 새 버전으로 실행합니다. 업데이트가 없는 경우 재설치하지 않습니다.
+- 다운로드·설치·업데이트 확인에 실패하면 마지막으로 설치가 완료된 버전으로 실행합니다. 처음 실행할 때는 설치를 위한 인터넷 연결이 필요합니다. 주가 조회에는 별도로 Yahoo/KRX 연결이 필요합니다.
+- 현재 버전과 직전 버전만 보관합니다. `data` 폴더와 기존 CSV는 업데이트나 이전 버전 정리 대상에 포함하지 않습니다. 한 폴더에서 앱은 하나만 실행합니다.
+- 제목 영역에 앱 버전과 Git 커밋 앞 8자리를 표시합니다. 런처는 `launch_app.py`와 `StartInvestment.cmd` 두 파일이며, 앱 코드와 패키지 설치는 자동으로 관리합니다.
+- 업데이트 확인을 생략하고 설치된 버전을 실행하려면 `python launch_app.py --no-update`를 사용합니다.
+
+macOS/Linux에서는 Tcl/Tk가 포함된 Python으로 `python launch_app.py`를 실행할 수 있습니다. Windows를 기본 사용 환경으로 검증합니다.
+
+## Python API / 명령줄 기능
+
+Yahoo Finance의 주가 이력을 받아 **시간순 pandas DataFrame, CSV, SQLite**로 저장합니다. API 키 없이 종목 티커, 기간, 봉 간격을 지정할 수 있습니다. 기본 조회는 최근 1년의 일봉입니다.
 
 - 미국 주식과 Yahoo에 등록된 한국 주식 조회
 - 시가·고가·저가·종가·수정종가·거래량, 배당·분할 이벤트
@@ -9,7 +57,7 @@ Yahoo Finance의 주가 이력을 받아 **시간순 pandas DataFrame, CSV, SQLi
 - SQLite 재수집 시 중복 없이 갱신
 - 입력 오류, 빈 데이터, 네트워크 오류 처리와 제한된 재시도
 
-## 설치
+### 명령줄 도구 설치
 
 Python 3.10 이상이 필요합니다.
 
@@ -19,17 +67,20 @@ cd Investment
 python -m venv .venv
 ```
 
-Windows PowerShell에서 가상환경을 활성화합니다.
+Windows PowerShell에서는 활성화 없이 가상환경의 Python으로 설치할 수 있습니다.
 
 ```powershell
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m investment --help
 ```
 
-macOS/Linux에서는 `source .venv/bin/activate`를 실행합니다. 이후 공통으로:
+macOS/Linux에서는 `source .venv/bin/activate`를 실행한 뒤:
 
 ```bash
 python -m pip install -e .
 ```
+
+직접 GUI를 설치해서 개발하려면 `python -m pip install -e ".[gui]"` 후 `python -m investment gui`로 실행합니다. 이 직접 실행 방식에는 런처의 자동 업데이트가 적용되지 않습니다.
 
 ## 명령줄에서 가져오기
 
@@ -137,14 +188,16 @@ ORDER BY timestamp;
 ## 개발과 검증
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[gui,dev]"
 ruff check .
 ruff format --check .
 pytest -q
 python -m build
 ```
 
-테스트는 네트워크 없이 날짜 경계, 한국/미국 시간대, DST, 중복·결측 처리, 재시도, CSV 보호, SQLite 갱신을 검증합니다. GitHub Actions는 Python 3.10/3.12/3.13에서 같은 검증과 패키지 빌드를 실행합니다. 실제 Yahoo 연결은 위 명령줄 예제로 별도 확인할 수 있습니다.
+테스트는 네트워크 없이 날짜 경계, 한국/미국 시간대, DST, 중복·결측 처리, 회사 검색, 내보내기, SQLite 갱신, 업데이트 전환·실패 시 복구를 검증합니다. GUI 통합 테스트는 검색→조회→그래프→CSV 저장과 최소 창 크기에서 주요 컨트롤이 화면 안에 들어오는지를 확인합니다. Linux에서는 `xvfb-run -a pytest -q`로 GUI 테스트를 실행합니다. 디스플레이가 없는 일반 터미널에서는 GUI 테스트만 건너뜁니다.
+
+GitHub Actions는 Linux Python 3.10/3.12/3.13과 Windows Python 3.12에서 검증과 패키지 빌드를 실행합니다. 실제 Yahoo/KRX 연결은 앱 또는 위 명령줄 예제로 별도 확인할 수 있습니다.
 
 ## 데이터 출처
 
@@ -152,3 +205,4 @@ python -m build
 
 - [yfinance history API와 날짜·조정 옵션](https://ranaroussi.github.io/yfinance/reference/yfinance.price_history.html)
 - [Yahoo Finance 종목 검색](https://finance.yahoo.com/)
+- [KRX KIND 상장법인 목록](https://kind.krx.co.kr/corpgeneral/corpList.do?method=loadInitPage)
