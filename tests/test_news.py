@@ -131,7 +131,7 @@ def test_export_keeps_date_only_blank_and_no_overwrite(tmp_path):
     exported = pd.read_csv(path, keep_default_na=False)
     assert exported["timestamp"].iloc[0] == exported["published_at"].iloc[0] == ""
     assert exported["event_date"].iloc[0] == "2024-01-02"
-    assert json.loads(meta.read_text())["sources"][0]["status"] == "sampled"
+    assert json.loads(meta.read_text(encoding="utf-8"))["sources"][0]["status"] == "sampled"
     assert export_news(result, tmp_path)[0] != path
 
 
