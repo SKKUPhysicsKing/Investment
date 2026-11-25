@@ -248,6 +248,9 @@ def main(argv=None):
                             "version": info.version,
                             "revision": info.revision,
                             "news_tab": bool(app.news_panel.frame.winfo_exists()),
+                            "event_track": app.event_ax.get_shared_x_axes().joined(
+                                app.event_ax, app.price_ax
+                            ),
                             "data_dir": str(app.data_dir),
                             "icon": (resource_root() / "assets" / "investment.ico").is_file(),
                         },

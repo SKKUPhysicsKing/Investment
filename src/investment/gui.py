@@ -23,8 +23,10 @@ from matplotlib.figure import Figure
 
 from .app_model import export_history, inclusive_request, load_company, plot_times
 from .market import PriceHistory
+from .news_collect import load_cached
 from .news_ui import NewsPanel
 from .search import Company, SearchResults, search_companies
+from .timeline import NewsTimeline, query_for_history
 
 INTERVAL_LABELS = {
     "일봉": "1d",
@@ -54,6 +56,11 @@ class InvestmentApp:
         self.end = tk.StringVar(value=today.isoformat())
         self.interval = tk.StringVar(value="일봉")
         self.price_column = tk.StringVar(value="종가")
+        self.show_volume = tk.BooleanVar(value=True)
+        self.volume_auto_hidden = False
+        self.chart_resize_timer = None
+        self.last_chart_height = None
+        self.last_pane_height = None
         self.status = tk.StringVar(value="회사명을 검색한 뒤 결과에서 종목을 선택하세요.")
         self.loaded_title = tk.StringVar(value="아직 조회한 데이터가 없습니다.")
         self.table_notice = tk.StringVar(value="조회 후 데이터를 확인할 수 있습니다.")
@@ -189,6 +196,10 @@ class InvestmentApp:
         ttk.Label(summary, textvariable=self.loaded_title, wraplength=500).grid(
             row=0, column=0, sticky="w"
         )
+        self.volume_toggle = ttk.Checkbutton(
+            summary, text="거래량", variable=self.show_volume, command=self._toggle_volume
+        )
+        self.volume_toggle.grid(row=0, column=1, padx=(6, 0))
         self.metric = ttk.Combobox(
             summary,
             textvariable=self.price_column,
@@ -196,32 +207,46 @@ class InvestmentApp:
             state="readonly",
             width=8,
         )
-        self.metric.grid(row=0, column=1, padx=(8, 0))
+        self.metric.grid(row=0, column=2, padx=(8, 0))
         self.metric.bind("<<ComboboxSelected>>", lambda _: self.draw_plot())
 
         self.notebook = ttk.Notebook(right)
         self.notebook.grid(row=2, column=0, sticky="nsew")
-        chart = ttk.Frame(self.notebook)
+        self.chart_frame = chart = ttk.Frame(self.notebook)
         table = ttk.Frame(self.notebook)
         self.notebook.add(chart, text="주가 그래프")
         self.notebook.add(table, text="데이터 표")
         chart.rowconfigure(0, weight=1)
         chart.columnconfigure(0, weight=1)
-        self.figure = Figure(figsize=(7, 4), dpi=100, layout="constrained")
-        self.price_ax, self.volume_ax = self.figure.subplots(
-            2, 1, sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+        self.chart_panes = ttk.Panedwindow(chart, orient="vertical")
+        self.chart_panes.grid(row=0, column=0, sticky="nsew")
+        plot = ttk.Frame(self.chart_panes)
+        articles = ttk.Frame(self.chart_panes)
+        self.chart_panes.add(plot, weight=4)
+        self.chart_panes.add(articles, weight=1)
+        plot.rowconfigure(0, weight=1)
+        plot.columnconfigure(0, weight=1)
+        self.chart_panes.bind(
+            "<Map>", lambda _: self.root.after_idle(self._fit_chart_panes), add="+"
         )
-        self.canvas = FigureCanvasTkAgg(self.figure, master=chart)
+        self.chart_panes.bind("<Configure>", lambda _: self._fit_chart_panes(), add="+")
+        self.figure = Figure(figsize=(7, 4), dpi=100, layout="constrained")
+        self.price_ax, self.volume_ax, self.event_ax = self.figure.subplots(
+            3, 1, sharex=True, gridspec_kw={"height_ratios": [3.2, 0.8, 1.4]}
+        )
+        self.canvas = FigureCanvasTkAgg(self.figure, master=plot)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
         # A DPI change on first mapping can update Figure's size without a Tk
         # resize event when grid keeps the canvas dimensions unchanged.
         self.canvas.get_tk_widget().bind(
             "<Map>", lambda _: self.root.after_idle(self._fit_canvas), add="+"
         )
-        toolbar_frame = ttk.Frame(chart)
+        self.canvas.get_tk_widget().bind("<Configure>", self._schedule_chart_layout, add="+")
+        toolbar_frame = ttk.Frame(plot)
         toolbar_frame.grid(row=1, column=0, sticky="ew")
         self.toolbar = NavigationToolbar2Tk(self.canvas, toolbar_frame)
         self.toolbar.update()
+        self.timeline = NewsTimeline(self, articles)
         self.price_ax.text(
             0.5,
             0.5,
@@ -288,6 +313,40 @@ class InvestmentApp:
                 "<Configure>", width=widget.winfo_width(), height=widget.winfo_height()
             )
 
+    def _fit_chart_panes(self):
+        height = self.chart_panes.winfo_height()
+        if height > 200 and height != self.last_pane_height:
+            self.last_pane_height = height
+            self.chart_panes.sashpos(0, max(170, height - max(128, min(165, int(height * 0.28)))))
+
+    def _toggle_volume(self):
+        self.volume_auto_hidden = False
+        self.draw_plot(preserve_view=True)
+
+    def _schedule_chart_layout(self, event):
+        if self.closed:
+            return
+        if self.chart_resize_timer:
+            self.root.after_cancel(self.chart_resize_timer)
+        height = event.height
+
+        def apply():
+            self.chart_resize_timer = None
+            changed = False
+            if height != self.last_chart_height:
+                if height < 240 and self.show_volume.get():
+                    self.show_volume.set(False)
+                    self.volume_auto_hidden = changed = True
+                elif height >= 280 and self.volume_auto_hidden:
+                    self.show_volume.set(True)
+                    self.volume_auto_hidden = False
+                    changed = True
+                self.last_chart_height = height
+            if changed and self.history is not None:
+                self.draw_plot(preserve_view=True)
+
+        self.chart_resize_timer = self.root.after_idle(apply)
+
     def _set_range(self, days: int):
         today = date.today()
         self.start.set((today - timedelta(days=days)).isoformat())
@@ -305,6 +364,7 @@ class InvestmentApp:
         )
         if hasattr(self, "news_panel"):
             self.news_panel.update_controls()
+        self.timeline.update_controls()
 
     def _run(self, work, done, status: str):
         if self.busy:
@@ -393,14 +453,33 @@ class InvestmentApp:
         except ValueError as exc:
             messagebox.showerror("입력 확인", str(exc), parent=self.root)
             return
+
+        def work():
+            history = load_company(company, start, end, interval)
+            cached = None
+            cache_notice = ""
+            if (self.data_dir / "news.sqlite").is_file():
+                try:
+                    cached = load_cached(query_for_history(history), self.data_dir)
+                except Exception:
+                    # A broken optional news cache must not prevent a stock plot.
+                    cache_notice = (
+                        "주가는 조회했지만 저장된 뉴스를 불러오지 못했습니다. "
+                        "그래프 뉴스 수집으로 자료를 조회하세요."
+                    )
+            return history, cached, cache_notice
+
         self._run(
-            lambda: load_company(company, start, end, interval),
-            self.show_history,
+            work,
+            lambda result: self.show_history(*result),
             f"{company.name} · {start} ~ {end} 조회 중…",
         )
 
-    def show_history(self, history: PriceHistory):
+    def show_history(self, history: PriceHistory, cached_news=None, cache_notice=""):
         self.history = history
+        self.timeline.set_history(history, cached_news)
+        if self.news_panel.result:
+            self.timeline.remember(self.news_panel.result)
         meta, frame = history.metadata, history.data
         name = meta.get("company_name", meta["symbol"])
         self.loaded_title.set(
@@ -432,17 +511,30 @@ class InvestmentApp:
             "CSV에는 전체 데이터 저장"
         )
         self.toolbar.update()
-        self.status.set("조회 완료. 그래프와 데이터 표를 확인하거나 CSV로 내보내세요.")
+        self.status.set(
+            cache_notice or "조회 완료. 그래프와 데이터 표를 확인하거나 CSV로 내보내세요."
+        )
+        self.notebook.select(self.chart_frame)
         self._button_states()
 
-    def draw_plot(self):
+    def draw_plot(self, *, preserve_view=False):
         if self.history is None:
             return
         frame, meta = self.history.data, self.history.metadata
         times = plot_times(self.history)
+        limits = (
+            (self.price_ax.get_xlim(), self.price_ax.get_ylim(), self.volume_ax.get_ylim())
+            if preserve_view
+            else None
+        )
         column = "adj_close" if self.price_column.get() == "수정종가" else "close"
         self.price_ax.clear()
         self.volume_ax.clear()
+        self.event_ax.clear()
+        self.volume_ax.set_visible(self.show_volume.get())
+        self.price_ax.get_subplotspec().get_gridspec().set_height_ratios(
+            [3.2, 0.8 if self.show_volume.get() else 0.01, 1.4]
+        )
         if frame[column].notna().any():
             self.price_ax.plot(times, frame[column], linewidth=1.2, color="#245f9e")
         else:
@@ -454,10 +546,16 @@ class InvestmentApp:
                 va="center",
                 transform=self.price_ax.transAxes,
             )
-        self.price_ax.set_title(
+        self.price_ax.text(
+            0.01,
+            0.98,
             f"{meta.get('company_name', meta['symbol'])} ({meta['symbol']})",
+            transform=self.price_ax.transAxes,
+            va="top",
             fontfamily=self.chart_font,
-            fontsize=11,
+            fontsize=9,
+            parse_math=False,
+            bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": "none", "pad": 1},
         )
         self.price_ax.set_ylabel(f"Price ({meta.get('currency') or '?'})")
         self.price_ax.grid(True, alpha=0.25)
@@ -467,12 +565,19 @@ class InvestmentApp:
         self.volume_ax.set_ylabel("Volume")
         self.volume_ax.grid(True, alpha=0.2)
         locator = mdates.AutoDateLocator(minticks=3, maxticks=7)
-        self.volume_ax.xaxis.set_major_locator(locator)
-        self.volume_ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
-        self.volume_ax.set_xlabel(f"Exchange local time · {meta.get('exchange_timezone') or 'UTC'}")
+        self.timeline.render(self.history)
+        self.event_ax.xaxis.set_major_locator(locator)
+        self.event_ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(locator))
+        self.event_ax.set_xlabel(
+            f"Exchange local time · {meta.get('exchange_timezone') or 'UTC'}", fontsize=8
+        )
         self.price_ax.tick_params(labelbottom=False)
-        if hasattr(self, "news_panel"):
-            self.news_panel.draw_overlay()
+        self.volume_ax.tick_params(labelbottom=False)
+        self.event_ax.tick_params(axis="x", labelsize=8)
+        if limits:
+            self.price_ax.set_xlim(limits[0])
+            self.price_ax.set_ylim(limits[1])
+            self.volume_ax.set_ylim(limits[2])
         self.canvas.draw_idle()
 
     def export(self):
@@ -501,6 +606,8 @@ class InvestmentApp:
         self.closed = True
         self.news_panel.cancel.set()
         self.root.after_cancel(self.timer)
+        if self.chart_resize_timer:
+            self.root.after_cancel(self.chart_resize_timer)
         self.root.destroy()
 
 

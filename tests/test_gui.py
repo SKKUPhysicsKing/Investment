@@ -130,12 +130,16 @@ def test_news_collect_chart_click_and_full_export(app, monkeypatch, history):
     panel = app.news_panel
     panel.collect_button.invoke()
     finish(app)
-    assert len(panel.tree.get_children()) == 1 and panel.markers is not None
+    timeline = app.timeline
+    assert len(panel.tree.get_children()) == 1 and timeline.artists
     assert "규칙" in panel.detail.get("1.0", "end")
     from types import SimpleNamespace
 
-    panel.on_pick(SimpleNamespace(artist=panel.markers, ind=[0]))
-    assert panel.date_filter == "2024-01-02"
+    app.notebook.select(app.chart_frame)
+    timeline.on_pick(SimpleNamespace(artist=next(iter(timeline.artists)), ind=[0]))
+    assert timeline.focus_key and len(timeline.tree.get_children()) == 1
+    assert app.notebook.select() == str(app.chart_frame)
+    assert news.title in timeline.preview.get()
     app.query.set("MSFT")
     app.start.set("2020-01-01")
     panel.export_button.invoke()
@@ -161,6 +165,144 @@ def test_news_controls_fit_small_window(app):
         assert x >= 0 and y >= 0
         assert x + widget.winfo_width() <= app.root.winfo_width()
         assert y + widget.winfo_height() <= app.root.winfo_height()
+
+
+def test_chart_collect_uses_loaded_company_and_stays_with_stock_plot(app, monkeypatch, history):
+    from investment.news import NewsStore
+
+    app.show_history(history)
+    app.show_results(SearchResults([Company("MSFT", "Microsoft", "NASDAQ", "Yahoo")]))
+    app.start.set("2020-01-01")
+    row = make_item(
+        Company("AAPL", "Apple", "NASDAQ", "Yahoo"),
+        "test",
+        "Apple earnings",
+        "2024-01-02",
+        "https://example.com/a",
+    )
+    result = NewsResult("AAPL", "Apple", "2024-01-02", "2024-01-03", [row], [])
+
+    def collect(query, *args):
+        assert query.company.symbol == "AAPL" and query.start == "2024-01-02"
+        return result
+
+    monkeypatch.setattr("investment.news_ui.collect_news", collect)
+    app.timeline.collect_button.invoke()
+    finish(app)
+    assert app.notebook.select() == str(app.chart_frame)
+    assert row.id in app.timeline.rows
+    NewsStore(app.data_dir / "news.sqlite").save(result)
+    app.show_results(SearchResults([Company("AAPL", "Apple", "NASDAQ", "Yahoo")]))
+    app.start.set("2024-01-02")
+    app.end.set("2024-01-03")
+    app.timeline.items = []
+    monkeypatch.setattr("investment.gui.load_company", lambda *args: history)
+    app.load_button.invoke()
+    finish(app)
+    assert row.id in app.timeline.rows
+
+
+def test_timeline_hover_and_other_company_collection_preserve_chart(app, history):
+    from matplotlib.backend_bases import MouseEvent
+
+    from investment.timeline import LANES
+
+    app.show_history(history)
+    row = make_item(
+        Company("AAPL", "Apple", "NASDAQ", "Yahoo"),
+        "test",
+        r"Apple earnings $5 \unknown$",
+        "2024-01-02",
+        "https://example.com/apple",
+    )
+    app.news_panel.show_result(
+        NewsResult("AAPL", "Apple", "2024-01-02", "2024-01-03", [row], []), select_tab=False
+    )
+    app.root.update()
+    group = app.timeline.groups[0]
+    x, y = app.event_ax.transData.transform((group.number, LANES[group.kind][0]))
+    app.timeline.on_motion(MouseEvent("motion_notify_event", app.canvas, x, y))
+    assert app.timeline.hover.get_visible()
+    assert row.title in app.timeline.hover.get_text()
+    app.canvas.draw()  # Finance headlines containing dollars must stay literal text.
+    app.timeline.detail_button.invoke()
+    app.root.update()
+    windows = [child for child in app.root.winfo_children() if isinstance(child, tk.Toplevel)]
+    assert windows and not app.root.grab_current()
+    assert app.notebook.select() == str(app.chart_frame)
+    for window in windows:
+        window.destroy()
+    other = make_item(
+        Company("MSFT", "Microsoft", "NASDAQ", "Yahoo"),
+        "test",
+        "Microsoft results",
+        "2024-01-02",
+        "https://example.com/microsoft",
+    )
+    app.news_panel.show_result(
+        NewsResult("MSFT", "Microsoft", "2024-01-02", "2024-01-03", [other], []), select_tab=False
+    )
+    app.root.update()
+    assert row.id in app.timeline.rows and other.id not in app.timeline.rows
+
+
+def test_corrupt_news_cache_keeps_stock_plot_and_explains_cache_failure(app, monkeypatch, history):
+    app.data_dir.mkdir(parents=True)
+    (app.data_dir / "news.sqlite").write_bytes(b"not a SQLite database")
+    app.show_results(SearchResults([Company("AAPL", "Apple", "NASDAQ", "Yahoo")]))
+    monkeypatch.setattr("investment.gui.load_company", lambda *args: history)
+    app.load_button.invoke()
+    finish(app)
+    assert app.history is history
+    assert "뉴스를 불러오지 못" in app.status.get()
+
+
+def test_chart_tracks_share_x_axis_and_keep_weekend_events(app, history):
+    import matplotlib.dates as mdates
+
+    history.metadata["ui_requested_dates"] = {"start": "2024-01-01", "end_inclusive": "2024-01-07"}
+    app.show_history(history)
+    row = make_item(
+        Company("AAPL", "Apple", "NASDAQ", "Yahoo"),
+        "test",
+        "Apple Sunday news",
+        "2024-01-07",
+        "https://example.com/sunday",
+    )
+    app.news_panel.show_result(
+        NewsResult("AAPL", "Apple", "2024-01-01", "2024-01-07", [row], []), select_tab=False
+    )
+    app.root.update()
+    assert app.price_ax.get_xlim() == app.volume_ax.get_xlim() == app.event_ax.get_xlim()
+    assert app.event_ax.get_xlim()[1] >= mdates.date2num(pd.Timestamp("2024-01-07"))
+    assert row.id in app.timeline.rows
+    app.price_ax.set_xlim(
+        mdates.date2num(pd.Timestamp("2024-01-02")), mdates.date2num(pd.Timestamp("2024-01-04"))
+    )
+    app.canvas.draw()
+    app.root.update()
+    assert not app.timeline.rows
+
+
+def test_chart_news_controls_fit_minimum_window(app, history):
+    app.show_history(history)
+    app.root.geometry("980x660")
+    app.root.update()
+    assert app.price_ax.bbox.height >= 55
+    assert app.event_ax.bbox.height >= 25
+    assert app.timeline.tree.winfo_height() >= 45
+    for widget in (
+        app.timeline.collect_button,
+        app.timeline.filter,
+        app.timeline.tree,
+        app.timeline.detail_button,
+        app.timeline.link_button,
+        app.timeline.cancel_button,
+    ):
+        x = widget.winfo_rootx() - app.root.winfo_rootx()
+        y = widget.winfo_rooty() - app.root.winfo_rooty()
+        assert 0 <= x and x + widget.winfo_width() <= app.root.winfo_width()
+        assert 0 <= y and y + widget.winfo_height() <= app.root.winfo_height()
 
 
 def test_native_desktop_entry_preserves_data_and_opens_news_tab(tmp_path, monkeypatch):

@@ -7,12 +7,9 @@ import json
 import threading
 import tkinter as tk
 import webbrowser
-from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-
-import pandas as pd
 
 from .app_model import inclusive_request
 from .news import EVENT_TYPES, SENTIMENTS, NewsStore, export_news, safe_url
@@ -43,8 +40,6 @@ class NewsPanel:
         self.cancel = threading.Event()
         self.cancel.set()
         self.rows = {}
-        self.markers = None
-        self.marker_dates = []
         self.date_filter = ""
         self.caption = tk.StringVar(value="회사와 기간을 선택한 뒤 뉴스/공시 수집을 누르세요.")
         self.notice = tk.StringVar(value="제공 범위·호출 한도에 따라 자료가 빠질 수 있습니다.")
@@ -56,7 +51,6 @@ class NewsPanel:
         self.frame.columnconfigure(0, weight=1)
         self.frame.rowconfigure(3, weight=1)
         self._build()
-        app.canvas.mpl_connect("pick_event", self.on_pick)
 
     def _build(self):
         toolbar = ttk.Frame(self.frame)
@@ -196,11 +190,11 @@ class NewsPanel:
             ["!disabled"] if self.app.busy and not self.cancel.is_set() else ["disabled"]
         )
 
-    def collect(self):
+    def collect(self, *, query=None, select_tab=True):
         if self.app.busy:
             return
         try:
-            query = self.query()
+            query = query or self.query()
         except ValueError as exc:
             messagebox.showerror("조회 조건", str(exc), parent=self.app.root)
             return
@@ -214,7 +208,7 @@ class NewsPanel:
                 self.cancel,
                 lambda message: self.app.events.put((None, message, None)),
             ),
-            self.show_result,
+            lambda result: self.show_result(result, select_tab=select_tab),
             "뉴스/공시 수집 중…",
         )
 
@@ -257,7 +251,7 @@ class NewsPanel:
                 "기사 파일을 읽고 회사/기간 조건을 확인하는 중…",
             )
 
-    def show_result(self, result):
+    def show_result(self, result, *, select_tab=True):
         self.cancel.set()
         self.result = result
         self.split.select(0)
@@ -284,8 +278,12 @@ class NewsPanel:
             or "검색/제공 범위 내 자료입니다. 긍정·부정은 실제 주가 영향이 아닌 추정입니다."
         )
         self.refresh()
-        self.app.draw_plot()
-        self.app.notebook.select(self.frame)
+        self.app.timeline.remember(result)
+        if self.app.history and self.app.history.metadata["symbol"] == result.symbol:
+            self.app.draw_plot()
+            self.app.toolbar.update()
+        if select_tab:
+            self.app.notebook.select(self.frame)
         self.app.status.set(
             f"뉴스/공시 {len(result.items):,}건 표시. "
             "출처별 수집 상태 탭에서 제한·오류를 확인하세요."
@@ -392,6 +390,8 @@ class NewsPanel:
                 for index, old in enumerate(self.result.items):
                     if old.id == enriched.id:
                         self.result.items[index] = enriched
+                self.app.timeline.remember(self.result)
+                self.app.draw_plot(preserve_view=True)
                 self.refresh()
                 if enriched.id in self.rows:
                     self.tree.selection_set(enriched.id)
@@ -421,7 +421,8 @@ class NewsPanel:
             item.label_method, item.confidence, item.rationale = "manual", 1.0, reason.get()
             NewsStore(self.app.data_dir / "news.sqlite").update_item(item)
             self.refresh()
-            self.app.draw_plot()
+            self.app.timeline.remember(self.result)
+            self.app.draw_plot(preserve_view=True)
             window.destroy()
 
         ttk.Button(window, text="저장", command=apply).pack(pady=(0, 10))
@@ -434,49 +435,6 @@ class NewsPanel:
                 lambda paths: self.app.status.set(f"뉴스 CSV 저장: {paths[0]}"),
                 "뉴스 전체 자료 내보내는 중…",
             )
-
-    def draw_overlay(self):
-        self.markers = None
-        history = self.app.history
-        if not self.result or not history or self.result.symbol != history.metadata["symbol"]:
-            return
-        first, last = history.data["date"].iloc[[0, -1]]
-        days = {}
-        for item in self.result.items:
-            if first <= item.event_date <= last:
-                days.setdefault(item.event_date, []).append(item.sentiment)
-        self.marker_dates = sorted(days)
-        if not self.marker_dates:
-            return
-        colors = []
-        for day in self.marker_dates:
-            counts = Counter(days[day])
-            colors.append(
-                "#b63232"
-                if counts["negative"] > counts["positive"]
-                else "#23854b"
-                if counts["positive"] > counts["negative"]
-                else "#866b24"
-            )
-        self.markers = self.app.price_ax.scatter(
-            pd.to_datetime(self.marker_dates),
-            [0.98] * len(days),
-            c=colors,
-            marker="v",
-            s=28,
-            transform=self.app.price_ax.get_xaxis_transform(),
-            picker=5,
-            zorder=6,
-            label="News/events (click)",
-        )
-        self.app.price_ax.legend(loc="lower left", fontsize=8)
-
-    def on_pick(self, event):
-        if event.artist is self.markers and len(event.ind):
-            self.date_filter = self.marker_dates[int(event.ind[0])]
-            self.refresh()
-            self.split.select(0)
-            self.app.notebook.select(self.frame)
 
     def configure(self):
         window = tk.Toplevel(self.app.root)
