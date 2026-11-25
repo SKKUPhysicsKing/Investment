@@ -1,10 +1,29 @@
 # Investment — 주가·뉴스 시계열 앱
 
-**회사명 검색 → 기간 입력 → 주가 그래프·뉴스/공시 시계열 → CSV 내보내기**를 제공하는 Windows 데스크톱 앱입니다. 실행할 때 GitHub `main`의 최신 코드를 확인하고 자동으로 설치합니다. 기존 Python API와 명령줄 수집 기능도 사용할 수 있습니다.
+**회사명 검색 → 기간 입력 → 주가 그래프·뉴스/공시 시계열 → CSV 내보내기**를 제공하는 Windows 데스크톱 앱입니다. **바탕화면 아이콘으로 콘솔 없이 실행**하며, GitHub에서 검증된 최신 앱을 자동으로 확인합니다. 기존 Python API와 명령줄 수집 기능도 사용할 수 있습니다.
 
 ## Windows에서 앱 실행
 
-Python 3.10 이상(Tcl/Tk 포함)이 한 번 설치되어 있어야 합니다. 이미 이 프로젝트의 CLI를 실행한 Windows PC라면 일반적으로 그대로 사용할 수 있습니다.
+**Windows 10/11 x64용 앱에는 Python과 필요한 패키지가 포함되어 있습니다. Python 설치, CMD, PowerShell, 가상환경 활성화가 필요하지 않습니다.**
+
+1. [Investment.exe 다운로드](https://github.com/SKKUPhysicsKing/Investment/releases/latest/download/Investment.exe)
+2. 기존에 사용하던 **`Investment` 폴더**에 저장합니다. 처음 사용하는 경우 원하는 앱 폴더에 저장합니다.
+3. **`Investment.exe`를 더블클릭**합니다. 준비/업데이트 상태는 작은 앱 창으로 표시하며 CMD 창은 열리지 않습니다.
+4. 첫 실행이 완료되면 **바탕화면과 시작 메뉴의 `Investment` 아이콘**이 생깁니다. 다음부터는 그 아이콘을 더블클릭하면 됩니다.
+
+CSV와 뉴스 DB는 계속 **처음 실행한 앱 폴더의 `data`**에 저장합니다. 기존 `data` 폴더를 옮기거나 삭제할 필요가 없습니다. 앱과 업데이트 파일은 사용자 전용 경로에 보관하므로 관리자 권한을 요구하지 않습니다. 첫 실행 시 포함된 런타임을 준비하므로 앱 창이 나타나기까지 잠시 걸릴 수 있습니다.
+
+### 아이콘 앱의 자동 업데이트
+
+- 아이콘으로 실행할 때 GitHub의 최신 **Windows 배포판**을 확인합니다. 소스의 `main` 변경은 자동 검사와 Windows 앱 빌드·실행 검증이 완료된 뒤 배포됩니다.
+- 새 앱을 `%LOCALAPPDATA%\Investment\desktop` 아래에 다운로드하고 파일 크기·SHA-256을 검증합니다. 새 앱의 GUI가 정상 초기화된 다음 활성 버전과 아이콘을 갱신합니다.
+- 다운로드나 검증에 실패하면 설치된 앱을 계속 실행합니다. **업데이트 건너뛰고 실행** 버튼으로 현재 앱을 열 수도 있습니다. 실행 중인 앱을 강제로 재시작하지 않습니다.
+- 마지막으로 정상 실행된 버전과 그 직전 버전을 보관합니다. 새 버전의 시작이 실패하면 재시도를 잠시 유예하고 이전 앱을 사용합니다. CSV와 뉴스 DB는 버전 정리 대상에 포함하지 않습니다.
+- 문제가 생기면 콘솔 대신 오류 창을 표시합니다. 시작 기록은 사용자 전용 앱 경로의 `startup.log`에 남깁니다.
+
+### 개발자용 소스 실행
+
+소스를 직접 실행하려면 Python 3.10 이상(Tcl/Tk 포함)이 필요합니다. 아래 기존 런처 방식도 계속 지원하며 이 방식에는 CMD 창이 표시됩니다.
 
 1. [최신 프로젝트 ZIP 다운로드](https://github.com/SKKUPhysicsKing/Investment/archive/refs/heads/main.zip)
 2. ZIP을 원하는 앱 폴더에 **압축 해제**합니다.
@@ -90,7 +109,7 @@ Invoke-WebRequest "https://raw.githubusercontent.com/SKKUPhysicsKing/Investment/
 
 개발용 Python에서도 `investment.news_collect.collect_news`, `NewsQuery`, `NewsSettings`를 사용할 수 있습니다. 뉴스 모듈을 사용하려면 `.[gui]` 의존성을 설치하세요. 뉴스 CLI 하위 명령은 제공하지 않습니다.
 
-## 자동 업데이트
+## 소스 런처의 자동 업데이트
 
 - `StartInvestment.cmd` 또는 `python launch_app.py`로 **앱을 실행할 때마다** GitHub 최신 커밋을 확인합니다. 실행 중인 창은 강제로 재시작하지 않습니다.
 - 새 버전이 있으면 별도 실행 환경에 설치하고 기본 동작에 필요한 모듈을 검사한 뒤 새 버전으로 실행합니다. Windows는 경로 길이 제한을 피하기 위해 `%LOCALAPPDATA%\Investment` 아래의 짧은 전용 경로를 사용합니다. 앱 폴더와 Python 버전별로 환경을 구분하며, ZIP을 여러 단계 폴더에 풀어도 패키지 설치 경로는 길어지지 않습니다. macOS/Linux는 앱 폴더의 `.investment-app` 아래에 설치합니다. 업데이트가 없는 경우 재설치하지 않습니다.
@@ -266,6 +285,16 @@ python -m build
 테스트는 네트워크 없이 날짜 경계, 한국/미국 시간대, DST, 중복·결측 처리, 회사 검색, 내보내기, SQLite 갱신, 업데이트 전환·실패 시 복구를 검증합니다. 뉴스는 출처별 응답 변환, API 키 미설정·오류 격리, 취소·부분 결과 보존, 과거 파일 가져오기, 중복 병합·수동 분류 보존, 날짜만 있는 공시, 본문 접근 제한을 검사합니다. GUI 통합 테스트는 검색→조회→그래프→CSV 저장, 뉴스 수집→차트 날짜 선택→전체 내보내기와 최소 창 크기의 주요 컨트롤 배치를 확인합니다. Linux에서는 `xvfb-run -a pytest -q`로 GUI 테스트를 실행합니다. 디스플레이가 없는 일반 터미널에서는 GUI 테스트만 건너뜁니다.
 
 GitHub Actions는 Linux Python 3.10/3.12/3.13과 Windows Python 3.10/3.12에서 검증과 패키지 빌드를 실행합니다. Windows에서는 깊게 중첩된 앱 폴더로부터 실제 가상환경·패키지를 설치하고, 문제의 `lxml` 리소스 파일 생성, 재실행 시 설치 생략, 기존 CSV 보존을 추가 검증합니다. 이 설치 테스트의 GitHub 응답만 체크아웃한 소스로 대체합니다. 실제 Yahoo/KRX 연결은 앱 또는 위 명령줄 예제로 별도 확인할 수 있습니다.
+
+Windows 앱은 모든 검사가 통과한 `main`에서 Python 3.12와 PyInstaller로 빌드합니다. 실제 `Investment.exe`의 PE 헤더가 Windows GUI 형식인지, 콘솔 창 없이 포함된 Python/Tk로 주가·뉴스 UI가 열리는지, 바탕화면/시작 메뉴 바로가기 설정, 설치 경로에서의 재실행과 기존 CSV 보존을 검증한 뒤 GitHub Releases에 EXE와 SHA-256을 게시합니다. 배포 파일에는 별도의 Python 설치가 필요하지 않습니다.
+
+Windows에서 직접 빌드하려면:
+
+```powershell
+python -m pip install -e ".[gui,desktop-build]"
+python scripts/build_windows.py
+python tests/windows_desktop_smoke.py dist/Investment.exe
+```
 
 ## 데이터 출처
 

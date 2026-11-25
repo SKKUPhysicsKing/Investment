@@ -2,6 +2,7 @@
 
 import time
 import tkinter as tk
+from pathlib import Path
 from unittest.mock import Mock
 
 import pandas as pd
@@ -160,3 +161,25 @@ def test_news_controls_fit_small_window(app):
         assert x >= 0 and y >= 0
         assert x + widget.winfo_width() <= app.root.winfo_width()
         assert y + widget.winfo_height() <= app.root.winfo_height()
+
+
+def test_native_desktop_entry_preserves_data_and_opens_news_tab(tmp_path, monkeypatch):
+    import json
+
+    from investment.desktop import main
+
+    try:
+        probe = tk.Tk()
+        probe.destroy()
+    except tk.TclError as exc:
+        pytest.skip(f"No desktop display: {exc}")
+    home = tmp_path / "Investment"
+    data = home / "data" / "existing.csv"
+    data.parent.mkdir(parents=True)
+    data.write_text("keep", encoding="utf-8")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    report = tmp_path / "desktop.json"
+    assert main(["--app-home", str(home), "--smoke-result", str(report)]) == 0
+    result = json.loads(report.read_text(encoding="utf-8"))
+    assert result["news_tab"] and Path(result["data_dir"]) == data.parent
+    assert data.read_text(encoding="utf-8") == "keep"

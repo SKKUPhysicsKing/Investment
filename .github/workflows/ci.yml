@@ -35,3 +35,35 @@ jobs:
         run: python tests/windows_bootstrap_smoke.py
       - run: python -m build
       - run: investment --help
+
+  windows-app:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: investment-windows-release
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[gui,desktop-build]"
+      - run: python scripts/build_windows.py
+      - run: python tests/windows_desktop_smoke.py dist/Investment.exe
+      - name: Publish tested Windows app
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $tag = "desktop-$env:GITHUB_SHA"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "This immutable app release already exists."
+            exit 0
+          }
+          gh release create $tag dist/Investment.exe dist/Investment.exe.sha256 --target $env:GITHUB_SHA --title "Investment Windows App" --notes-file dist/release-notes.md --draft
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit $tag --draft=false --latest

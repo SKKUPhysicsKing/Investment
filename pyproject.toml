@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "investment-stock-data"
-version = "0.3.0"
+version = "0.4.0"
 description = "Fetch reproducible stock price time series from Yahoo Finance"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ dependencies = ["pandas>=2.2,<4", "yfinance>=1.8,<2"]
 [project.optional-dependencies]
 gui = ["matplotlib>=3.8,<4", "requests>=2.31,<3", "lxml>=4.9", "beautifulsoup4>=4.11,<5", "defusedxml>=0.7,<1", "openpyxl>=3.1,<4", "pypdf>=5,<7"]
 dev = ["pytest>=8,<10", "ruff>=0.14,<1", "build>=1,<2"]
+desktop-build = ["pyinstaller==6.22.3", "pywin32>=311; sys_platform == 'win32'"]
 
 [project.scripts]
 investment = "investment.cli:main"
