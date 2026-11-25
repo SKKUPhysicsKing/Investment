@@ -58,7 +58,8 @@ def main():
         result = json.loads(report.read_text(encoding="utf-8"))
         assert result["frozen"] and not result["console_window"], result
         assert result["news_tab"] and result["icon"], result
-        assert Path(result["data_dir"]) == sentinel.parent
+        # Windows TEMP can use RUNNER~1 while the app resolves its long path.
+        assert Path(result["data_dir"]).samefile(sentinel.parent), result
         assert sentinel.read_text(encoding="utf-8") == "keep existing data"
         info = BuildInfo(result["version"], result["revision"], "2026-11-25T00:00:00Z")
         cache = root / "cache"
@@ -76,8 +77,8 @@ def main():
             for path in paths:
                 assert path.is_file()
                 link = shell.CreateShortcut(str(path))
-                assert Path(link.TargetPath) == target
-                assert Path(link.WorkingDirectory) == home
+                assert Path(link.TargetPath).samefile(target)
+                assert Path(link.WorkingDirectory).samefile(home)
                 assert "--app-home" in link.Arguments
                 assert "cmd" not in link.TargetPath.lower()
         finally:
