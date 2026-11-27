@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from .market import HistoryRequest, PriceHistory, fetch_prices
+from .rates import RateHistory
 from .search import Company
 from .storage import save_csv
 
@@ -54,6 +55,21 @@ def export_history(history: PriceHistory, data_dir: Path) -> tuple[Path, Path]:
     for number in range(1, 10000):
         suffix = "" if number == 1 else f"_{number}"
         target = data_dir / f"{stem}{suffix}.csv"
+        try:
+            return save_csv(history, target)
+        except FileExistsError:
+            continue
+    raise OSError("같은 이름의 내보내기 파일이 너무 많습니다.")
+
+
+def export_rates(history: RateHistory, data_dir: Path) -> tuple[Path, Path]:
+    first, last = history.data["date"].min(), history.data["date"].max()
+    identifiers = history.data["series_id"].unique()
+    name = identifiers[0] if len(identifiers) == 1 else f"comparison_{len(identifiers)}series"
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    for number in range(1, 10000):
+        suffix = "" if number == 1 else f"_{number}"
+        target = data_dir / f"rates_{name}_{first}_{last}{suffix}.csv"
         try:
             return save_csv(history, target)
         except FileExistsError:

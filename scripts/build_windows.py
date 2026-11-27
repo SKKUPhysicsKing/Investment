@@ -109,6 +109,8 @@ def main():
     binary.with_suffix(".exe.sha256").write_text(digest + "  Investment.exe\n", encoding="ascii")
     (project / "dist" / "release-notes.md").write_text(
         f"Investment {app_version} — Windows 10/11 x64\n\n"
+        "금리 · 비교 탭: 미국·한국 금리 다중 조회, 그래프 비교, 전체 CSV 저장.\n"
+        "차트 집중 모드와 기사 목록 접기로 그래프를 넓게 볼 수 있습니다.\n\n"
         "Investment.exe를 기존 Investment 폴더에 저장한 뒤 더블클릭하세요.\n"
         "Python 설치나 CMD 실행이 필요하지 않습니다. 첫 실행 후 바탕화면과 시작 메뉴의 "
         "Investment 아이콘으로 열 수 있습니다. 기존 폴더의 data를 계속 사용합니다.\n\n"

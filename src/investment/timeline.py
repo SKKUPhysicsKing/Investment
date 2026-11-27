@@ -499,6 +499,8 @@ class NewsTimeline:
             return
         indices = getattr(event, "ind", [0])
         if len(indices):
+            if hasattr(self.app, "reveal_articles"):
+                self.app.reveal_articles()
             self.focus_key = groups[int(indices[0])].key
             self.selected_id = groups[int(indices[0])].items[0].id
             self.viewport = None

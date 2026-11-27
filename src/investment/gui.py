@@ -25,6 +25,7 @@ from .app_model import export_history, inclusive_request, load_company, plot_tim
 from .market import PriceHistory
 from .news_collect import load_cached
 from .news_ui import NewsPanel
+from .rates_ui import RatePanel
 from .search import Company, SearchResults, search_companies
 from .timeline import NewsTimeline, query_for_history
 
@@ -65,16 +66,20 @@ class InvestmentApp:
         self.status = tk.StringVar(value="회사명을 검색한 뒤 결과에서 종목을 선택하세요.")
         self.loaded_title = tk.StringVar(value="아직 조회한 데이터가 없습니다.")
         self.table_notice = tk.StringVar(value="조회 후 데이터를 확인할 수 있습니다.")
+        self.focus_view = tk.BooleanVar(value=False)
+        self.show_articles = tk.BooleanVar(value=True)
         self._configure_window()
         self._build()
         self.news_panel = NewsPanel(self)
+        self.rate_panel = RatePanel(self)
+        self.notebook.bind("<<NotebookTabChanged>>", self._tab_changed, add="+")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.timer = self.root.after(100, self._poll)
 
     def _configure_window(self):
-        self.root.title("Investment — 주가·뉴스 시계열")
-        width = min(1180, self.root.winfo_screenwidth() - 60)
-        height = min(800, self.root.winfo_screenheight() - 80)
+        self.root.title("Investment — 주가·금리·뉴스")
+        width = min(1360, self.root.winfo_screenwidth() - 60)
+        height = min(880, self.root.winfo_screenheight() - 80)
         self.root.geometry(f"{width}x{height}")
         self.root.minsize(980, 660)
         self.root.columnconfigure(0, weight=1)
@@ -101,21 +106,30 @@ class InvestmentApp:
         for name in ("TkDefaultFont", "TkTextFont", "TkHeadingFont", "TkMenuFont"):
             tkfont.nametofont(name).configure(family=self.ui_font, size=9)
         ttk.Style(self.root).configure("Treeview", rowheight=25)
+        style = ttk.Style(self.root)
+        style.configure("Treeview.Heading", font=(self.ui_font, 9, "bold"))
+        style.configure("TNotebook.Tab", padding=(12, 6))
+        style.configure("TButton", padding=(7, 4))
 
     def _build(self):
         header = ttk.Frame(self.root, padding=(12, 10))
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(
-            header, text="Investment · 주가·뉴스 시계열", font=(self.ui_font, 13, "bold")
-        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, text="Investment · 주가·금리·뉴스", font=(self.ui_font, 13, "bold")).grid(
+            row=0, column=0, sticky="w"
+        )
+        self.focus_button = ttk.Checkbutton(
+            header, text="차트 집중", variable=self.focus_view, command=self._apply_layout
+        )
+        self.focus_button.grid(row=0, column=1, padx=16)
         revision = os.environ.get("INVESTMENT_REVISION", "")
         label = f"v{version('investment-stock-data')}" + (f" · {revision[:8]}" if revision else "")
-        ttk.Label(header, text=label).grid(row=0, column=1, sticky="e")
+        ttk.Label(header, text=label).grid(row=0, column=2, sticky="e")
 
         self.panes = ttk.Panedwindow(self.root, orient="horizontal")
         self.panes.grid(row=1, column=0, sticky="nsew", padx=12)
         left = ttk.Frame(self.panes, padding=(0, 0, 10, 0), width=290)
+        self.search_panel = left
         right = ttk.Frame(self.panes)
         self.panes.add(left, weight=0)
         self.panes.add(right, weight=1)
@@ -165,6 +179,7 @@ class InvestmentApp:
         )
 
         form = ttk.LabelFrame(right, text="2. 조회 기간 (시작일·종료일 모두 포함)", padding=10)
+        self.price_form = form
         form.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         form.columnconfigure(4, weight=1)
         ttk.Label(form, text="시작일").grid(row=0, column=0, sticky="w")
@@ -192,15 +207,23 @@ class InvestmentApp:
         self.load_button.state(["disabled"])
 
         summary = ttk.Frame(right)
+        self.price_summary = summary
         summary.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         summary.columnconfigure(0, weight=1)
-        ttk.Label(summary, textvariable=self.loaded_title, wraplength=500).grid(
-            row=0, column=0, sticky="w"
+        self.loaded_label = ttk.Label(summary, textvariable=self.loaded_title, wraplength=500)
+        self.loaded_label.grid(row=0, column=0, sticky="w")
+        summary.bind(
+            "<Configure>",
+            lambda event: self.loaded_label.configure(wraplength=max(160, event.width - 260)),
         )
         self.volume_toggle = ttk.Checkbutton(
             summary, text="거래량", variable=self.show_volume, command=self._toggle_volume
         )
         self.volume_toggle.grid(row=0, column=1, padx=(6, 0))
+        self.article_toggle = ttk.Checkbutton(
+            summary, text="기사 목록", variable=self.show_articles, command=self._apply_layout
+        )
+        self.article_toggle.grid(row=0, column=2, padx=(6, 0))
         self.metric = ttk.Combobox(
             summary,
             textvariable=self.price_column,
@@ -208,7 +231,7 @@ class InvestmentApp:
             state="readonly",
             width=8,
         )
-        self.metric.grid(row=0, column=2, padx=(8, 0))
+        self.metric.grid(row=0, column=3, padx=(8, 0))
         self.metric.bind("<<ComboboxSelected>>", lambda _: self.draw_plot())
 
         self.notebook = ttk.Notebook(right)
@@ -223,6 +246,7 @@ class InvestmentApp:
         self.chart_panes.grid(row=0, column=0, sticky="nsew")
         plot = ttk.Frame(self.chart_panes)
         articles = ttk.Frame(self.chart_panes)
+        self.article_frame = articles
         self.chart_panes.add(plot, weight=4)
         self.chart_panes.add(articles, weight=1)
         plot.rowconfigure(0, weight=1)
@@ -284,6 +308,7 @@ class InvestmentApp:
         self.table.configure(yscrollcommand=ys.set, xscrollcommand=xs.set)
 
         bottom = ttk.Frame(right, padding=(0, 8))
+        self.price_bottom = bottom
         bottom.grid(row=3, column=0, sticky="ew")
         bottom.columnconfigure(0, weight=1)
         ttk.Label(bottom, text="주가: 주말·휴장일 제외 · 마지막 봉은 장중 갱신 가능").grid(
@@ -293,9 +318,6 @@ class InvestmentApp:
         self.export_button.grid(row=0, column=1, padx=5)
         self.export_button.state(["disabled"])
         ttk.Button(bottom, text="data 폴더 열기", command=self.open_data).grid(row=0, column=2)
-        ttk.Label(bottom, text=f"저장 위치: {self.data_dir}", wraplength=650).grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(5, 0)
-        )
 
         footer = ttk.Frame(self.root, padding=(12, 7))
         footer.grid(row=2, column=0, sticky="ew")
@@ -316,9 +338,43 @@ class InvestmentApp:
 
     def _fit_chart_panes(self):
         height = self.chart_panes.winfo_height()
-        if height > 200 and height != self.last_pane_height:
+        if len(self.chart_panes.panes()) > 1 and height > 200 and height != self.last_pane_height:
             self.last_pane_height = height
             self.chart_panes.sashpos(0, max(170, height - max(128, min(165, int(height * 0.28)))))
+
+    def _tab_changed(self, _event=None):
+        if hasattr(self, "rate_panel"):
+            self._apply_layout()
+
+    def reveal_articles(self):
+        self.focus_view.set(False)
+        self.show_articles.set(True)
+        self._apply_layout()
+
+    def _apply_layout(self):
+        if not hasattr(self, "rate_panel"):
+            return
+        rates = self.notebook.select() == str(self.rate_panel.frame)
+        focus = self.focus_view.get()
+        has_search = str(self.search_panel) in tuple(map(str, self.panes.panes()))
+        if (rates or focus) and has_search:
+            self.panes.forget(self.search_panel)
+        elif not rates and not focus and not has_search:
+            self.panes.insert(0, self.search_panel, weight=0)
+            self.root.after_idle(lambda: self.panes.sashpos(0, 290))
+        for widget in (self.price_form, self.price_bottom):
+            widget.grid_remove() if rates or focus else widget.grid()
+        self.price_summary.grid_remove() if rates else self.price_summary.grid()
+        self.rate_panel.set_focus(focus)
+        show = self.show_articles.get() and not focus
+        has_articles = str(self.article_frame) in tuple(map(str, self.chart_panes.panes()))
+        if not show and has_articles:
+            self.chart_panes.forget(self.article_frame)
+        elif show and not has_articles:
+            self.chart_panes.add(self.article_frame, weight=1)
+            self.last_pane_height = None
+            self.root.after_idle(self._fit_chart_panes)
+        self.root.after_idle(self._fit_canvas)
 
     def _toggle_volume(self):
         self.volume_auto_hidden = False
@@ -377,6 +433,8 @@ class InvestmentApp:
         )
         if hasattr(self, "news_panel"):
             self.news_panel.update_controls()
+        if hasattr(self, "rate_panel"):
+            self.rate_panel.update_controls()
         self.timeline.update_controls()
 
     def _run(self, work, done, status: str):
@@ -550,10 +608,10 @@ class InvestmentApp:
         )
         self.volume_ax.set_visible(self.show_volume.get())
         self.price_ax.get_subplotspec().get_gridspec().set_height_ratios(
-            [3.2, 0.8 if self.show_volume.get() else 0.01, 1.4]
+            [4.0, 0.8 if self.show_volume.get() else 0.01, 1.0]
         )
         if frame[column].notna().any():
-            self.price_ax.plot(times, frame[column], linewidth=1.2, color="#245f9e")
+            self.price_ax.plot(times, frame[column], linewidth=1.7, color="#2563b4")
         else:
             self.price_ax.text(
                 0.5,
@@ -597,6 +655,13 @@ class InvestmentApp:
         self.volume_ax.tick_params(labelbottom=False)
         self.event_ax.tick_params(axis="x", labelsize=self.chart_font_size(8))
         self.event_ax.xaxis.get_offset_text().set_fontsize(self.chart_font_size(7.5))
+        for axis in (self.price_ax, self.volume_ax, self.event_ax):
+            axis.set_facecolor("#f8fafc")
+            axis.spines[["top", "right"]].set_visible(False)
+            axis.spines[["left", "bottom"]].set_color("#bccbda")
+            axis.tick_params(colors="#4b6075")
+        self.price_ax.grid(axis="y", color="#dfe7ef", linewidth=0.7, alpha=1)
+        self.price_ax.grid(axis="x", visible=False)
         if limits:
             self.price_ax.set_xlim(limits[0])
             self.price_ax.set_ylim(limits[1])
@@ -628,6 +693,7 @@ class InvestmentApp:
     def close(self):
         self.closed = True
         self.news_panel.cancel.set()
+        self.rate_panel.cancel.set()
         self.root.after_cancel(self.timer)
         if self.chart_resize_timer:
             self.root.after_cancel(self.chart_resize_timer)

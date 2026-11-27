@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "investment-stock-data"
-version = "0.5.0"
-description = "Fetch reproducible stock price time series from Yahoo Finance"
+version = "0.6.0"
+description = "Stock prices, interest rates and news with reproducible time-series exports"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["pandas>=2.2,<4", "yfinance>=1.8,<2"]
