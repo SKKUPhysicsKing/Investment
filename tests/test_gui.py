@@ -104,6 +104,70 @@ def test_invalid_dates_do_not_start_network(app, monkeypatch):
     assert not app.busy
 
 
+def test_rate_comparison_without_company_exports_loaded_snapshot(app, monkeypatch, rate_history):
+    panel = app.rate_panel
+    app.notebook.select(panel.frame)
+    app.root.update()
+    monkeypatch.setattr("investment.rates_ui.collect_rates", lambda *args, **kwargs: rate_history)
+    panel.start.set("2024-01-02")
+    panel.end.set("2024-01-03")
+    panel.load_button.invoke()
+    finish(app)
+    assert panel.history is rate_history and app.history is None
+    assert len(panel.ax.lines) == 2
+    assert not app.price_form.winfo_ismapped()
+    panel.start.set("2000-01-01")
+    panel.selected = {"DGS2"}
+    panel.export_button.invoke()
+    finish(app)
+    files = list(app.data_dir.glob("rates*.csv"))
+    frame = pd.read_csv(files[0])
+    assert set(frame.series_id) == {"DFF", "DGS10"}
+    assert frame.date.min() == "2024-01-02"
+
+
+def test_rate_failure_preserves_previous_comparison(app, monkeypatch, rate_history):
+    panel = app.rate_panel
+    panel.show_history(rate_history)
+    monkeypatch.setattr(
+        "investment.rates_ui.collect_rates", Mock(side_effect=TimeoutError("offline"))
+    )
+    panel.load_button.invoke()
+    finish(app)
+    assert panel.history is rate_history and len(panel.ax.lines) == 2
+    assert panel.export_button.instate(["!disabled"])
+
+
+def test_focus_layout_returns_controls_and_preserves_stock_view(app, history, rate_history):
+    app.show_history(history)
+    app.root.update()
+    app.price_ax.set_xlim(19724.1, 19724.9)
+    before = app.price_ax.get_xlim()
+    app.focus_button.invoke()
+    app.root.update()
+    assert len(app.panes.panes()) == 1 and len(app.chart_panes.panes()) == 1
+    assert not app.price_form.winfo_ismapped()
+    assert app.price_ax.get_xlim() == before
+    app.focus_button.invoke()
+    app.root.update()
+    assert app.price_form.winfo_ismapped() and len(app.panes.panes()) == 2
+    app.notebook.select(app.rate_panel.frame)
+    app.rate_panel.show_history(rate_history)
+    app.root.geometry("980x660")
+    app.root.update()
+    for widget in (
+        app.rate_panel.load_button,
+        app.rate_panel.export_button,
+        app.rate_panel.tabs,
+        app.focus_button,
+    ):
+        x = widget.winfo_rootx() - app.root.winfo_rootx()
+        y = widget.winfo_rooty() - app.root.winfo_rooty()
+        assert 0 <= x and 0 <= y
+        assert x + widget.winfo_width() <= app.root.winfo_width()
+        assert y + widget.winfo_height() <= app.root.winfo_height()
+
+
 def test_news_collect_chart_click_and_full_export(app, monkeypatch, history):
     company = Company("AAPL", "Apple Inc.", "NASDAQ", "Yahoo")
     app.show_results(SearchResults([company]))

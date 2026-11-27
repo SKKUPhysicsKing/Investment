@@ -58,6 +58,7 @@ def main():
         result = json.loads(report.read_text(encoding="utf-8"))
         assert result["frozen"] and not result["console_window"], result
         assert result["news_tab"] and result["event_track"] and result["icon"], result
+        assert result["rates_tab"], result
         # Windows TEMP can use RUNNER~1 while the app resolves its long path.
         assert Path(result["data_dir"]).samefile(sentinel.parent), result
         assert sentinel.read_text(encoding="utf-8") == "keep existing data"

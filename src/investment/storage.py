@@ -8,15 +8,19 @@ import sqlite3
 import tempfile
 from contextlib import closing
 from pathlib import Path
+from typing import Any, Protocol
 
 import pandas as pd
 
 from .market import PRICE_COLUMNS, PriceHistory
 
 
-def save_csv(
-    history: PriceHistory, path: str | Path, *, overwrite: bool = False
-) -> tuple[Path, Path]:
+class Snapshot(Protocol):
+    data: pd.DataFrame
+    metadata: dict[str, Any]
+
+
+def save_csv(history: Snapshot, path: str | Path, *, overwrite: bool = False) -> tuple[Path, Path]:
     """Write an Excel-friendly CSV and a JSON provenance sidecar.
 
     Each file is replaced atomically. The two-file pair is not one transaction.
@@ -31,9 +35,10 @@ def save_csv(
             raise FileExistsError(f"File exists: {destination}. Use --overwrite to replace it.")
     target.parent.mkdir(parents=True, exist_ok=True)
     export = history.data.copy()
-    export["timestamp"] = export["timestamp"].map(
-        lambda value: value.isoformat() if not pd.isna(value) else ""
-    )
+    if "timestamp" in export:
+        export["timestamp"] = export["timestamp"].map(
+            lambda value: value.isoformat() if not pd.isna(value) else ""
+        )
     pending: list[tuple[Path, Path]] = []
     try:
         for destination, content, encoding in (

@@ -40,3 +40,33 @@ def history(raw_history):
             "row_count": 2,
         },
     )
+
+
+@pytest.fixture
+def rate_history():
+    from investment.rates import RATE_COLUMNS, RateHistory
+
+    rows, series = [], []
+    for identifier, name, values in (
+        ("DFF", "미국 실효 연방기금금리", [5.33, 5.33]),
+        ("DGS10", "미국 국채 10년", [3.95, 3.91]),
+    ):
+        for day, value in zip(("2024-01-02", "2024-01-03"), values, strict=True):
+            rows.append([day, identifier, name, "US", value, "percent", "daily", "FRED"])
+        series.append(
+            {
+                "series_id": identifier,
+                "series_name": name,
+                "frequency": "daily",
+                "source_url": f"https://fred.stlouisfed.org/series/{identifier}",
+                "row_count": 2,
+            }
+        )
+    return RateHistory(
+        pd.DataFrame(rows, columns=RATE_COLUMNS).sort_values(["date", "series_id"]),
+        {
+            "series": series,
+            "errors": {},
+            "request": {"start": "2024-01-02", "end_inclusive": "2024-01-03"},
+        },
+    )

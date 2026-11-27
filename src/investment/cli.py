@@ -7,9 +7,11 @@ import re
 import sqlite3
 import sys
 from collections.abc import Sequence
+from datetime import date, timedelta
 from pathlib import Path
 
 from .market import INTERVALS, PERIODS, FetchError, fetch_prices
+from .rates import RATE_SERIES, collect_rates
 from .storage import save_csv, save_sqlite
 
 
@@ -35,6 +37,21 @@ def make_parser() -> argparse.ArgumentParser:
     )
     fetch.add_argument("--timeout", type=float, default=15, help="Per-request timeout in seconds")
     fetch.add_argument("--attempts", type=int, default=3, help="Provider attempts, 1-5; default 3")
+    rates = subparsers.add_parser(
+        "rates", help="Download FRED/ECOS interest rates (inclusive dates)"
+    )
+    rates.add_argument(
+        "series", nargs="*", help="Series IDs, for example DFF DGS2 DGS10 BOK_BASE_RATE"
+    )
+    rates.add_argument(
+        "--list", action="store_true", help="List the built-in interest-rate catalog"
+    )
+    rates.add_argument("--start", default=(date.today() - timedelta(days=365)).isoformat())
+    rates.add_argument(
+        "--end", default=date.today().isoformat(), help="Last observation date, inclusive"
+    )
+    rates.add_argument("-o", "--output", type=Path, default=Path("data/rates.csv"))
+    rates.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -51,6 +68,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         return gui_main([])
     try:
+        if args.command == "rates":
+            if args.list:
+                for series in RATE_SERIES.values():
+                    print(f"{series.id}\t{series.country}\t{series.frequency}\t{series.name}")
+                return 0
+            if not args.series:
+                raise ValueError("Choose rate series; use investment rates --list.")
+            result = collect_rates(args.series, start=args.start, end=args.end)
+            paths = save_csv(result, args.output, overwrite=args.overwrite)
+            print(f"Saved {len(result.data)} rate observations -> {paths[0]}")
+            print(f"Metadata -> {paths[1]}")
+            for identifier, error in result.metadata["errors"].items():
+                print(f"Unavailable: {identifier}: {error}", file=sys.stderr)
+            return 1 if result.metadata["errors"] else 0
         history = fetch_prices(
             args.symbol,
             start=args.start,
