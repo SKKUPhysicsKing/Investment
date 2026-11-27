@@ -165,6 +165,7 @@ class NewsTimeline:
                 "text": label,
                 "command": lambda action=action: self.navigate(action),
                 "width": 4,
+                "style": "Chart.TCheckbutton" if variable is not None else "Chart.TButton",
             }
             button = (
                 ttk.Checkbutton(controls, variable=variable, **options)

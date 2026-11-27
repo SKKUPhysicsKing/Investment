@@ -110,6 +110,8 @@ class InvestmentApp:
         style.configure("Treeview.Heading", font=(self.ui_font, 9, "bold"))
         style.configure("TNotebook.Tab", padding=(12, 6))
         style.configure("TButton", padding=(7, 4))
+        style.configure("Chart.TButton", padding=(3, 2))
+        style.configure("Chart.TCheckbutton", padding=(2, 2))
 
     def _build(self):
         header = ttk.Frame(self.root, padding=(12, 10))
